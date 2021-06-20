@@ -17,16 +17,22 @@ public:
 
 	void SetPos(short pos);
 
-	void DestroyWindow();
+	void OffsetPos(short pos);
 
-	void Invalidate(CExportTableDlg* window);
+	void HideWindow();
+
+	void DestroyWindow();
 
 	CProgressCtrl* GetProgressCtl() { return m_pProgressCtrl; }
 
-	void SetBarColor(COLORREF clrBar);
+	short GetRangeUpper();
+
+	short GetPos();
 private:
 	int m_show;
 	int m_id;
+	short m_nLower;
+	short m_nUpper;
 	CWnd* m_parent;
 	CProgressCtrl* m_pProgressCtrl;
 };

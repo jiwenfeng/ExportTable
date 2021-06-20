@@ -35,6 +35,9 @@ void CProgressBar::ShowWindow(const CRect &rect)
 
 void CProgressBar::SetRange(short nLower, short nUpper)
 {
+	m_show = 1;
+	m_nLower = nLower;
+	m_nUpper = nUpper;
 	m_pProgressCtrl->SetRange(nLower, nUpper);
 }
 
@@ -43,18 +46,32 @@ void CProgressBar::SetPos(short pos)
 	m_pProgressCtrl->SetPos(pos);
 }
 
+void CProgressBar::OffsetPos(short pos)
+{
+	m_pProgressCtrl->OffsetPos(pos);
+}
+
+void CProgressBar::HideWindow()
+{
+	m_pProgressCtrl->ShowWindow(0);
+}
+
 void CProgressBar::DestroyWindow()
 {
-	if (m_show == 0)
+	if (m_show == 1)
 	{
-		m_pProgressCtrl->ShowWindow(0);
+		m_show = 0;
+		m_pProgressCtrl->ShowWindow(m_show);
+		m_pProgressCtrl->SetPos(0);
 	}
 }
 
-void CProgressBar::Invalidate(CExportTableDlg* window)
+short CProgressBar::GetRangeUpper()
 {
-	CRect rect;
-	m_pProgressCtrl->GetWindowRect(&rect);
-	window->ScreenToClient(&rect);
-	window->InvalidateRect(&rect);
+	return m_nUpper;
+}
+
+short CProgressBar::GetPos()
+{
+	return m_pProgressCtrl->GetPos();
 }

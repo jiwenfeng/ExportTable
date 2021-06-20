@@ -16,17 +16,29 @@ public:
 
 protected:
 	DECLARE_MESSAGE_MAP()
+
 public:
 	afx_msg void OnPaint();
 
+	afx_msg void OnKeyDown(UINT nChar, UINT nRepCnt, UINT nFlags);
+
+	afx_msg void OnNMKillfocus(NMHDR* pNMHDR, LRESULT* pResult);
+
+	afx_msg void OnKillFocus(CWnd* pNewWnd);
+
+public:
 	void InitProgressColumn(int ColNum);
 
 	CProgressBar* GetProgressCtrl(int i);
 
 private:
-	CArray<CProgressBar*, CProgressBar *> m_ProgressList;
-	// the column which should contain the progress bars
+	int m_oldTop;
+	int m_oldLast;
 	int m_ProgressColumn;
+	char m_chLastPressKey;
+	char m_nCount;
+	time_t m_nLastPressTime;
+	CArray<CProgressBar*, CProgressBar*> m_ProgressList;
 };
 
 

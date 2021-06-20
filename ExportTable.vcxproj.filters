@@ -33,13 +33,7 @@
     <ClInclude Include="pch.h">
       <Filter>头文件</Filter>
     </ClInclude>
-    <ClInclude Include="enum.h">
-      <Filter>头文件</Filter>
-    </ClInclude>
     <ClInclude Include="Excel.h">
-      <Filter>头文件</Filter>
-    </ClInclude>
-    <ClInclude Include="Queue.h">
       <Filter>头文件</Filter>
     </ClInclude>
     <ClInclude Include="CRichEditCtrlEx.h">
@@ -49,6 +43,9 @@
       <Filter>头文件</Filter>
     </ClInclude>
     <ClInclude Include="CProgressBar.h">
+      <Filter>头文件</Filter>
+    </ClInclude>
+    <ClInclude Include="CSetupDialog.h">
       <Filter>头文件</Filter>
     </ClInclude>
   </ItemGroup>
@@ -74,16 +71,14 @@
     <ClCompile Include="CProgressBar.cpp">
       <Filter>源文件</Filter>
     </ClCompile>
+    <ClCompile Include="CSetupDialog.cpp">
+      <Filter>源文件</Filter>
+    </ClCompile>
   </ItemGroup>
   <ItemGroup>
     <ResourceCompile Include="ExportTable.rc">
       <Filter>资源文件</Filter>
     </ResourceCompile>
-  </ItemGroup>
-  <ItemGroup>
-    <None Include="res\ExportTable.rc2">
-      <Filter>资源文件</Filter>
-    </None>
   </ItemGroup>
   <ItemGroup>
     <Image Include="res\ExportTable.ico">

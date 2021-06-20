@@ -5,7 +5,8 @@
 #pragma once
 
 #include <thread>
-#include <vector>
+#include <map>
+#include "CRichEditCtrlEx.h"
 #include "CListCtrlEx.h"
 
 // CExportTableDlg 对话框
@@ -40,30 +41,33 @@ public:
 	afx_msg void OnBnClickedButtonSelectall();
 	afx_msg void OnBnClickedOk();
 	afx_msg void OnTimer(UINT_PTR nIDEvent);
-
+	virtual BOOL DestroyWindow();
+	afx_msg void On32772();
 
 private:
 	void LoadXLSFile(const CString &path);
 
-	BOOL ReadExcel(const CString& name, int id);
+	int CheckCallback(int id, const CString& file, const CString& sheet, const CString& err);
 
-	void CheckXLSFile();
+	int SetProgressBarCallback(int id, int nUpper);
 
-	void ShowProgress();
+	int UpdateProgressBarCallback(int id, int nPos);
 
-	void ShowResult();
+	void CheckXLSFile(std::map<int, CString> exportList);
 
+	void LoadConfig();
 private:
-	BOOL m_flag;
 	CListCtrlEx m_fileList;
-	CString m_excelPath;
-	CRichEditCtrl m_richEdit;
+	CRichEditCtrlEx m_richEdit;
 	CButton m_btnSelectAll;
 	CButton m_btnExport;
 	CProgressCtrl m_pgExport;
 
 private:
-	std::vector<int> m_errList;
-public:
-	virtual BOOL DestroyWindow();
+	BOOL m_flag;
+	CString m_strExcelDir;
+	CString m_strClientDir;
+	CString m_strServerIP;
+	CString m_strHostID;
+	std::map<int, int> m_status;
 };
