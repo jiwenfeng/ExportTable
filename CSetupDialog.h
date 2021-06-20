@@ -3,6 +3,9 @@
 
 // CSetupDialog 对话框
 
+#define RELOAD_FILE_LIST 0x00000001
+#define RELOAD_SERVER    0x00000010
+
 class CSetupDialog : public CDialog
 {
 	DECLARE_DYNAMIC(CSetupDialog)
@@ -27,6 +30,9 @@ public:
 	afx_msg void OnBnClickedButtonChooseExcelDir();
 	afx_msg void OnClose();
 
+public:
+	virtual BOOL OnInitDialog();
+
 private:
 	CString GetDirectory();
 
@@ -39,7 +45,7 @@ private:
 
 	CString m_strExcelDir;
 	CString m_strClientDir;
-	BOOL m_bExcelDirChanged;
+	int m_status;
 	CString m_strHostId;
 	CString m_strServerIP;
 

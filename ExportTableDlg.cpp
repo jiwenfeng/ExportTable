@@ -12,6 +12,7 @@
 #include <memory>
 #include <thread>
 #include "CSetupDialog.h"
+#include "CHelpDialog.h"
 
 #pragma comment(lib, "Shlwapi.lib")
 
@@ -39,6 +40,7 @@ void CExportTableDlg::DoDataExchange(CDataExchange* pDX)
 	DDX_Control(pDX, IDC_BUTTON_SELECTALL, m_btnSelectAll);
 	DDX_Control(pDX, IDOK, m_btnExport);
 	DDX_Control(pDX, IDC_PROGRESS_EXPORT, m_pgExport);
+	DDX_Control(pDX, IDC_EDIT_SERVER, m_serverEdit);
 }
 
 BEGIN_MESSAGE_MAP(CExportTableDlg, CDialogEx)
@@ -50,6 +52,7 @@ BEGIN_MESSAGE_MAP(CExportTableDlg, CDialogEx)
 	ON_BN_CLICKED(IDC_BUTTON_SELECTALL, &CExportTableDlg::OnBnClickedButtonSelectall)
 	ON_WM_TIMER()
 	ON_COMMAND(ID_32772, &CExportTableDlg::On32772)
+	ON_COMMAND(ID_32775, &CExportTableDlg::On32775)
 END_MESSAGE_MAP()
 
 
@@ -112,8 +115,20 @@ void CExportTableDlg::LoadConfig()
 		On32772();
 		return;
 	}
-	CString fullPath = m_strExcelDir + _T("*.xls");
-	LoadXLSFile(fullPath);
+	LoadServer();
+	LoadXLSFile();
+}
+
+void CExportTableDlg::LoadServer()
+{
+	CString cfgFile = _T("./config.ini");
+	wchar_t sd[MAX_PATH] = { 0 };
+	wchar_t hd[MAX_PATH] = { 0 };
+	GetPrivateProfileString(_T("Setup"), _T("ServerIP"), _T(""), sd, sizeof(sd), cfgFile);
+	GetPrivateProfileString(_T("Setup"), _T("HostID"), _T(""), hd, sizeof(hd), cfgFile);
+	m_strServerIP = sd;
+	m_strHostID = hd;
+	m_serverEdit.SetWindowTextW(m_strServerIP + _T(":") + m_strHostID);
 }
 
 void CExportTableDlg::OnPaint()
@@ -161,11 +176,16 @@ void CExportTableDlg::OnLvnItemchangedListFile(NMHDR* pNMHDR, LRESULT* pResult)
 	*pResult = 0;
 }
 
-void CExportTableDlg::LoadXLSFile(const CString& path)
+void CExportTableDlg::LoadXLSFile()
 {
+	CString cfgFile = _T("./config.ini");
+	wchar_t ed[MAX_PATH] = { 0 };
+	GetPrivateProfileString(_T("Setup"), _T("Excel"), _T(""), ed, sizeof(ed), cfgFile);
+	m_strExcelDir = ed;
+
 	m_fileList.DeleteAllItems();
 	CFileFind ff;
-	BOOL ret = ff.FindFile(path);
+	BOOL ret = ff.FindFile(m_strExcelDir + _T("*.xls"));
 	int i = 0;
 	while (ret)
 	{
@@ -363,14 +383,28 @@ BOOL CExportTableDlg::DestroyWindow()
 	return CDialogEx::DestroyWindow();
 }
 
-
 void CExportTableDlg::On32772()
 {
 	// TODO: 在此添加命令处理程序代码
-	CSetupDialog dialog;
+	CSetupDialog dialog(this);
 	int ret = dialog.DoModal();
-	if (ret == 1)
+	if (ret & RELOAD_FILE_LIST)
 	{
-		LoadConfig();
+		LoadXLSFile();
 	}
+	if (ret & RELOAD_SERVER)
+	{
+		LoadServer();
+	}
+	CString cfgFile = _T("./config.ini");
+	wchar_t cd[MAX_PATH] = { 0 };
+	GetPrivateProfileString(_T("Setup"), _T("Client"), _T(""), cd, sizeof(cd), cfgFile);
+	m_strClientDir = cd;
+}
+
+void CExportTableDlg::On32775()
+{
+	CHelpDialog dialog(this);
+	dialog.DoModal();
+	// TODO: 在此添加命令处理程序代码
 }

@@ -45,7 +45,7 @@ public:
 	afx_msg void On32772();
 
 private:
-	void LoadXLSFile(const CString &path);
+	void LoadXLSFile();
 
 	int CheckCallback(int id, const CString& file, const CString& sheet, const CString& err);
 
@@ -56,6 +56,8 @@ private:
 	void CheckXLSFile(std::map<int, CString> exportList);
 
 	void LoadConfig();
+
+	void LoadServer();
 private:
 	CListCtrlEx m_fileList;
 	CRichEditCtrlEx m_richEdit;
@@ -70,4 +72,7 @@ private:
 	CString m_strServerIP;
 	CString m_strHostID;
 	std::map<int, int> m_status;
+	CEdit m_serverEdit;
+public:
+	afx_msg void On32775();
 };

@@ -193,6 +193,7 @@
     </ResourceCompile>
   </ItemDefinitionGroup>
   <ItemGroup>
+    <ClInclude Include="CHelpDialog.h" />
     <ClInclude Include="CListCtrlEx.h" />
     <ClInclude Include="CProgressBar.h" />
     <ClInclude Include="CRichEditCtrlEx.h" />
@@ -206,6 +207,7 @@
     <ClInclude Include="targetver.h" />
   </ItemGroup>
   <ItemGroup>
+    <ClCompile Include="CHelpDialog.cpp" />
     <ClCompile Include="CListCtrlEx.cpp" />
     <ClCompile Include="CProgressBar.cpp" />
     <ClCompile Include="CRichEditCtrlEx.cpp" />

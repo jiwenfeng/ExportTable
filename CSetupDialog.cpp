@@ -11,11 +11,13 @@
 
 IMPLEMENT_DYNAMIC(CSetupDialog, CDialog)
 
+
+
 CSetupDialog::CSetupDialog(CWnd* pParent /*=nullptr*/)
 	: CDialog(IDD_DIALOG_SETUP, pParent)
 {
     m_flag = FALSE;
-    m_bExcelDirChanged = FALSE;
+    m_status = 0;
 }
 
 CSetupDialog::~CSetupDialog()
@@ -69,7 +71,7 @@ CString CSetupDialog::GetDirectory()
 
 void CSetupDialog::OnShowWindow(BOOL bShow, UINT nStatus)
 {
-    ::SetWindowPos(this->GetSafeHwnd(), HWND_NOTOPMOST, 0, 0, 400, 190, SWP_NOMOVE);
+    ::SetWindowPos(this->GetSafeHwnd(), HWND_NOTOPMOST, 0, 0, 0, 0, SWP_NOMOVE | SWP_NOSIZE);
     CDialog::OnShowWindow(bShow, nStatus);
 
     // TODO: 在此处添加消息处理程序代码
@@ -104,22 +106,24 @@ void CSetupDialog::OnBnClickedButtonSetup()
     m_clientDir.GetWindowTextW(strClientDir);
     m_serverIP.GetWindowTextW(strServerIP);
     m_hostId.GetWindowTextW(strHostId);
-    if (strExcelDir != m_strExcelDir)
+    if (strExcelDir != m_strExcelDir && !strExcelDir.IsEmpty())
     {
         m_strExcelDir = strExcelDir;
-        m_bExcelDirChanged = TRUE;
+        m_status |= RELOAD_FILE_LIST;
     }
-    if (strClientDir != m_strClientDir)
+    if (strClientDir != m_strClientDir && !strClientDir.IsEmpty())
     {
         m_strClientDir = strClientDir;
     }
-    if (strServerIP != m_strServerIP)
+    if (strServerIP != m_strServerIP && !strServerIP.IsEmpty())
     {
         m_strServerIP = strServerIP;
+        m_status |= RELOAD_SERVER;
     }
-    if (strHostId != m_strHostId)
+    if (strHostId != m_strHostId && !strHostId.IsEmpty())
     {
         m_strHostId = strHostId;
+        m_status |= RELOAD_SERVER;
     }
     if (m_strClientDir.IsEmpty() || m_strExcelDir.IsEmpty() || strServerIP.IsEmpty() || strHostId.IsEmpty())
     {
@@ -133,7 +137,7 @@ void CSetupDialog::OnBnClickedButtonSetup()
     WritePrivateProfileString(_T("Setup"), _T("ServerIP"), strServerIP, cfgFile);
     WritePrivateProfileString(_T("Setup"), _T("HostID"), strHostId, cfgFile);
     m_flag = TRUE;
-    EndDialog(m_bExcelDirChanged);
+    EndDialog(m_status);
 }
 
 void CSetupDialog::OnBnClickedButtonChooseClientDir()
@@ -142,7 +146,6 @@ void CSetupDialog::OnBnClickedButtonChooseClientDir()
     CString dir = GetDirectory();
     if (dir.IsEmpty())
     {
-        MessageBox(_T("请选择客户端文件夹"), _T("提示"), MB_ICONWARNING);
         return;
     }
     m_strClientDir = dir;
@@ -156,12 +159,11 @@ void CSetupDialog::OnBnClickedButtonChooseExcelDir()
     CString dir = GetDirectory();
     if (dir.IsEmpty())
     {
-        MessageBox(_T("请选择Excel文件夹"), _T("提示"), MB_ICONWARNING);
         return;
     }
     if (dir != m_strExcelDir)
     {
-        m_bExcelDirChanged = TRUE;
+        m_status = RELOAD_FILE_LIST;
     }
     m_strExcelDir = dir;
     m_excelDir.SetWindowTextW(dir);
@@ -173,8 +175,23 @@ void CSetupDialog::OnClose()
     // TODO: 在此添加消息处理程序代码和/或调用默认值
     if (!m_flag)
     {
-        MessageBox(_T("Excel文件夹、客户端文件夹、服务器IP和服务器ID不能为空"), _T("提示"), MB_ICONWARNING);
+        if (IDOK == MessageBox(_T("Excel文件夹、客户端文件夹、服务器IP和服务器ID不能为空, 是否退出"), _T("提示"), MB_OKCANCEL | MB_ICONWARNING))
+        {
+            exit(0);
+        }
         return;
     }
     CDialog::OnClose();
+}
+
+
+BOOL CSetupDialog::OnInitDialog()
+{
+    CDialog::OnInitDialog();
+
+    // TODO:  在此添加额外的初始化
+    HICON icon = AfxGetApp()->LoadIconW(IDR_MAINFRAME);
+    SetIcon(icon, true);
+    return TRUE;  // return TRUE unless you set the focus to a control
+                  // 异常: OCX 属性页应返回 FALSE
 }
