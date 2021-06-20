@@ -6,13 +6,12 @@
 #include <functional>
 #include <book.hpp>
 #include <exceptions.hpp>
-#include "CProgressBar.h"
 #include <compoundfile/compoundfile_exceptions.hpp>
 
 class CExcel
 {
 public:
-	CExcel();
+	CExcel(std::function<int(const CString&, const CString&)> check_cb);
 
 	~CExcel();
 
@@ -56,16 +55,17 @@ private:
 private:
 	std::string CString2String(CString from);
 public:
-	BOOL Check(const CString &file, int id);
+	BOOL Check(const CString &file, std::function<int(int)> SetProgressBarCallBack, std::function<int(int)> UpdateProgressBarCallBack);
 
 	CString ErrorMsg();
 
 private:
 	CString m_err;
-	std::map<int, CString> m_colInfo;
 	CString m_types;
 	CString m_file;
 	CString m_sheet;
+	std::map<int, CString> m_colInfo;
+	std::function<int(const CString&, const CString&)> m_callback;
 	std::map <CString, std::function<BOOL (const CString& data)> > m_checkFuncList;
 };
 

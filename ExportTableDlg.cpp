@@ -11,7 +11,7 @@
 #include "Excel.h"
 #include <memory>
 #include <thread>
-#include "Queue.h"
+#include "CSetupDialog.h"
 
 #pragma comment(lib, "Shlwapi.lib")
 
@@ -49,6 +49,7 @@ BEGIN_MESSAGE_MAP(CExportTableDlg, CDialogEx)
 	ON_BN_CLICKED(IDOK, &CExportTableDlg::OnBnClickedOk)
 	ON_BN_CLICKED(IDC_BUTTON_SELECTALL, &CExportTableDlg::OnBnClickedButtonSelectall)
 	ON_WM_TIMER()
+	ON_COMMAND(ID_32772, &CExportTableDlg::On32772)
 END_MESSAGE_MAP()
 
 
@@ -65,65 +66,55 @@ BOOL CExportTableDlg::OnInitDialog()
 
 	ShowWindow(SW_SHOWNORMAL);
 
+	HMENU menu = LoadMenu(NULL, MAKEINTRESOURCE(IDR_MENU_MAIN));
+	::SetMenu(GetSafeHwnd(), menu);
+	::DrawMenuBar(GetSafeHwnd());
+
+
 	// TODO: 在此添加额外的初始化代码
-
-
-	CString cfgFile = _T("./config.ini");
-
-	BOOL flag = PathFileExists(cfgFile);
-	if (!flag)
-	{
-		MessageBox(_T("没有找到config.init配置文件"), _T("错误"), MB_ICONERROR);
-		return FALSE;
-	}
-
 	DWORD style = m_fileList.GetExStyle();
 	style |= LVS_EX_CHECKBOXES;
 	style |= LVS_EX_GRIDLINES;
 	style |= LVS_EX_FULLROWSELECT;
-
 	m_fileList.SetExtendedStyle(style);
-
 	CRect rect;
 	m_fileList.GetWindowRect(&rect);
 	ScreenToClient(&rect);
-
-	int width = rect.right - rect.left;
-
-
-	m_fileList.InsertColumn(0, _T(""), LVCFMT_CENTER, 30);
-	m_fileList.InsertColumn(1, _T("文件名"), LVCFMT_LEFT, width - 50);
-
-
-	CString excelPath;
-
-	int ret = GetPrivateProfileString(_T("dir"), _T("EXCEL_DIR"), _T(""), excelPath.GetBuffer(MAX_PATH), MAX_PATH, cfgFile);
-	if (ret == 0)
-	{
-		MessageBox(_T("读取配置文件路径失败"), _T("错误"), MB_ICONERROR);
-		return FALSE;
-	}
-
-	CString fullPath(excelPath.GetBuffer());
-
-	m_excelPath = fullPath;
-	
-	fullPath.Append(L"\\*.*");
-	
-	LoadXLSFile(fullPath);
-
-	std::thread p(std::bind(&CExportTableDlg::ShowResult, this));
-	p.detach();
-
-	std::thread p1(std::bind(&CExportTableDlg::ShowProgress, this));
-	p1.detach();
-	SetTimer(100, 100, NULL);
+	int width = rect.right - rect.left - 30;
+	m_fileList.InsertColumn(0, _T(""), LVCFMT_CENTER, 50);
+	m_fileList.InsertColumn(1, _T("文件名"), LVCFMT_LEFT,  200);
+	m_fileList.InsertColumn(2, _T(""), LVCFMT_LEFT, width - 250);
+	LoadConfig();
 	return TRUE;  // 除非将焦点设置到控件，否则返回 TRUE
 }
 
 // 如果向对话框添加最小化按钮，则需要下面的代码
 //  来绘制该图标。  对于使用文档/视图模型的 MFC 应用程序，
 //  这将由框架自动完成。
+
+void CExportTableDlg::LoadConfig()
+{
+	CString cfgFile = _T("./config.ini");
+	wchar_t ed[MAX_PATH] = { 0 };
+	wchar_t cd[MAX_PATH] = { 0 };
+	wchar_t sd[MAX_PATH] = { 0 };
+	wchar_t hd[MAX_PATH] = { 0 };
+	GetPrivateProfileString(_T("Setup"), _T("Excel"), _T(""), ed, sizeof(ed), cfgFile);
+	GetPrivateProfileString(_T("Setup"), _T("Client"), _T(""), cd, sizeof(cd), cfgFile);
+	GetPrivateProfileString(_T("Setup"), _T("ServerIP"), _T(""), sd, sizeof(sd), cfgFile);
+	GetPrivateProfileString(_T("Setup"), _T("HostID"), _T(""), hd, sizeof(hd), cfgFile);
+	m_strExcelDir = ed;
+	m_strClientDir = cd;
+	m_strServerIP = sd;
+	m_strHostID = hd;
+	if (m_strClientDir.IsEmpty() || m_strExcelDir.IsEmpty() || m_strServerIP.IsEmpty() || m_strHostID.IsEmpty())
+	{
+		On32772();
+		return;
+	}
+	CString fullPath = m_strExcelDir + _T("*.xls");
+	LoadXLSFile(fullPath);
+}
 
 void CExportTableDlg::OnPaint()
 {
@@ -172,117 +163,172 @@ void CExportTableDlg::OnLvnItemchangedListFile(NMHDR* pNMHDR, LRESULT* pResult)
 
 void CExportTableDlg::LoadXLSFile(const CString& path)
 {
+	m_fileList.DeleteAllItems();
 	CFileFind ff;
 	BOOL ret = ff.FindFile(path);
-
 	int i = 0;
 	while (ret)
 	{
 		ret = ff.FindNextFileW();
-		if (ff.IsDirectory() || ff.IsDots() || ff.GetFileTitle() == "common_config")
-		{
-			continue;
-		}
-
-		CString fileName = ff.GetFileName();
-
-		int pos = fileName.ReverseFind('.');
-		if (-1 == pos)
-		{
-			continue;
-		}
-		CString ext = fileName.Right(fileName.GetLength() - pos - 1);
-		if (ext != "xls")
+		if (ff.GetFileTitle() == "common_config")
 		{
 			continue;
 		}
 		m_fileList.InsertItem(i, _T(""));
-		m_fileList.SetItemText(i++, 1, ff.GetFileName());
+		m_fileList.SetItemText(i, 1, ff.GetFileName());
+		m_fileList.SetItemText(i, 2, _T(""));
+		++i;
 	}
-	m_fileList.InitProgressColumn(i);
 	ff.Close();
-}
-
-BOOL CExportTableDlg::ReadExcel(const CString& name, int id)
-{
-	std::shared_ptr<CExcel> pExcel(new CExcel);
-	BOOL ret = pExcel->Check(name, id);
-	if (!ret)
+	m_fileList.InitProgressColumn(i);
+	if (m_fileList.GetItemCount() == 0) 
 	{
-		m_errList.push_back(id);
+		m_btnSelectAll.EnableWindow(FALSE);
+		m_btnExport.EnableWindow(FALSE);
 	}
-	return TRUE;
+	else
+	{
+		m_btnSelectAll.EnableWindow(TRUE);
+		m_btnExport.EnableWindow(TRUE);
+		m_fileList.SetFocus();
+	}
 }
 
-void CExportTableDlg::CheckXLSFile()
+int CExportTableDlg::CheckCallback(int id, const CString &file, const CString& sheet, const CString& err)
 {
+	m_richEdit.SetSel(-1, -1);
+	long nStart = 0;
+	long nEnd = 0;
+	m_richEdit.GetSel(nStart, nEnd);
+	m_richEdit.ReplaceSel(_T("处理[") + file + _T("]失败 ") + sheet + err + _T("\r\n"));
+	CHARFORMAT2 cf;
+	ZeroMemory(&cf, sizeof(cf));
+	cf.cbSize = sizeof(CHARFORMAT2);
+	cf.dwMask = CFM_COLOR | CFM_FACE | CFM_SIZE | CFM_LINK;
+	cf.dwEffects |= CFE_LINK;
+
+	m_richEdit.SetSel(nStart + 3, nStart + file.GetLength() + 3);
+	m_richEdit.SetSelectionCharFormat(cf);
+	m_richEdit.SendMessage(EM_SETCHARFORMAT, SCF_SELECTION, (LPARAM)&cf);
+	m_richEdit.SetEventMask(ENM_LINK);
+	m_richEdit.SendMessage(WM_VSCROLL, SB_BOTTOM, 0);
+	m_richEdit.SetSel(0, 0);
+	if (m_status.find(id) == m_status.end())
+	{
+		m_status.insert(std::make_pair(id, 1));
+	}
+	return 0;
+}
+
+int CExportTableDlg::SetProgressBarCallback(int id, int nUpper)
+{
+	m_fileList.GetProgressCtrl(id)->SetRange(0, nUpper);
+	m_fileList.SetItemText(id, 2, _T(""));
+	return 0;
+}
+
+int CExportTableDlg::UpdateProgressBarCallback(int id, int nPos)
+{
+	m_fileList.GetProgressCtrl(id)->OffsetPos(1);
+
+	if (m_fileList.GetProgressCtrl(id)->GetPos() == m_fileList.GetProgressCtrl(id)->GetRangeUpper())
+	{
+		m_fileList.GetProgressCtrl(id)->DestroyWindow();
+		if (m_status.find(id) != m_status.end())
+		{
+			m_fileList.SetItemText(id, 2, _T("x"));
+		}
+		else
+		{
+			m_fileList.SetItemText(id, 2, _T("√"));
+		}
+	}
+	else
+	{
+		m_fileList.SetItemText(id, 2, _T(""));
+	}
+	return 0;
+}
+
+void CExportTableDlg::CheckXLSFile(std::map<int, CString> exportList)
+{
+	m_status.clear();
 	int nCount = m_fileList.GetItemCount();
 	for (int i = 0; i < nCount; ++i)
 	{
-		if (m_fileList.GetCheck(i))
-		{
-			CString path = m_excelPath + "\\" + m_fileList.GetItemText(i, 1);
-			ReadExcel(path, i);
-			m_pgExport.SetPos(i);
-		}
+		m_fileList.SetItemText(i, 2, _T(""));
 	}
+	m_richEdit.SetWindowTextW(_T("开始检查数据表格式...\r\n"));
+	for (std::map<int, CString>::iterator i = exportList.begin(); i != exportList.end(); ++i)
+	{
+		if (i->first > m_fileList.GetTopIndex())
+		{
+			int row = i->first + (m_fileList.GetCountPerPage() / 2);
+			int realrow = row >= nCount ? nCount - 1 : row;
+			m_fileList.EnsureVisible(realrow, FALSE);
+		}
+		else
+		{
+			m_fileList.EnsureVisible(i->first, FALSE);
+		}
+
+
+		CExcel excel(
+			std::bind(&CExportTableDlg::CheckCallback, this, i->first, i->second, std::placeholders::_1, std::placeholders::_2)
+		);
+		excel.Check(
+			i->second,
+			std::bind(&CExportTableDlg::SetProgressBarCallback, this, i->first, std::placeholders::_1),
+			std::bind(&CExportTableDlg::UpdateProgressBarCallback, this, i->first, std::placeholders::_1)
+		);
+		m_pgExport.OffsetPos(1);
+	}
+
+	m_richEdit.SetSel(-1, -1);
+	if (!m_status.empty())
+	{	
+		m_richEdit.ReplaceSel(_T("数据表填写有误，导表终止\r\n"));
+	}
+	else
+	{
+		m_richEdit.ReplaceSel(_T("数据表格式检查完成，开始执行导表...\r\n"));
+	}
+
+	m_pgExport.SetPos(0);
 	m_btnExport.EnableWindow(true);
 	m_btnSelectAll.EnableWindow(true);
-	m_flag = 1;
+	m_flag = TRUE;
 	OnBnClickedButtonSelectall();
 	m_pgExport.ShowWindow(false);
-
-	if (!m_errList.empty())
-	{
-
-	}
-}
-
-void CExportTableDlg::ShowProgress()
-{
-	while (TRUE)
-	{
-		ProgressCmd cmd = MQ<ProgressCmd>::getInstance().Pop();
-		CProgressBar* bar = m_fileList.GetProgressCtrl(cmd.id);
-		if (bar == NULL)
-		{
-			continue;
-		}
-		if (cmd.type == 0)
-		{
-			bar->SetRange(cmd.arg1, cmd.arg2);
-			bar->ShowWindow(1);
-			//bar->Invalidate(this);
-		}
-		else if (cmd.type == 1)
-		{
-			bar->SetPos(cmd.arg1);
-			//bar->Invalidate(this);
-		}
-	}
-}
-
-void CExportTableDlg::ShowResult()
-{
-	while (TRUE)
-	{
-		CString data = Queue::getInstance().Pop();
-		m_richEdit.SetSel(0, 0);
-		m_richEdit.ReplaceSel(data + _T("\r\n"));
-	}
 }
 
 void CExportTableDlg::OnBnClickedOk()
 {
 	// TODO: 在此添加控件通知处理程序代码
+	std::map<int, CString> exportList;
+	for (int i = 0; i < m_fileList.GetItemCount(); ++i)
+	{
+		if (m_fileList.GetCheck(i))
+		{
+			CString file = m_strExcelDir + m_fileList.GetItemText(i, 1);
+			exportList.insert(std::make_pair(i, file));
+		}
+	}
+	if (exportList.empty())
+	{
+		MessageBox(_T("请选择要导出的文件"), _T("提示"), MB_ICONWARNING);
+		return;
+	}
+	
+	m_richEdit.SetWindowTextW(_T(""));
 	m_btnExport.EnableWindow(false);
 	m_btnSelectAll.EnableWindow(false);
-	//m_fileList.EnableWindow(false);
 	m_pgExport.ShowWindow(true);
-	m_pgExport.SetRange(0, m_fileList.GetItemCount());
-	std::thread p(std::bind(&CExportTableDlg::CheckXLSFile, this));
+	m_pgExport.SetRange(0, exportList.size());
+	m_pgExport.SetPos(0);
+
+	std::thread p(std::bind(&CExportTableDlg::CheckXLSFile, this, exportList));
 	p.detach();
-	//CDialogEx::OnOK();
 }
 
 void CExportTableDlg::OnBnClickedButtonSelectall()
@@ -304,18 +350,27 @@ void CExportTableDlg::OnBnClickedButtonSelectall()
 	}
 }
 
-
 void CExportTableDlg::OnTimer(UINT_PTR nIDEvent)
 {
 	// TODO: 在此添加消息处理程序代码和/或调用默认值
-	//m_fileList.OnPaint();
 	CDialogEx::OnTimer(nIDEvent);
 }
-
 
 BOOL CExportTableDlg::DestroyWindow()
 {
 	// TODO: 在此添加专用代码和/或调用基类
-	CDialogEx::DestroyWindow();
-	exit(0);
+	m_flag = 0;
+	return CDialogEx::DestroyWindow();
+}
+
+
+void CExportTableDlg::On32772()
+{
+	// TODO: 在此添加命令处理程序代码
+	CSetupDialog dialog;
+	int ret = dialog.DoModal();
+	if (ret == 1)
+	{
+		LoadConfig();
+	}
 }

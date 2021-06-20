@@ -2,9 +2,8 @@
 #include "Excel.h"
 #include <memory>
 #include <vector>
-#include "Queue.h"
 
-CExcel::CExcel()
+CExcel::CExcel(std::function<int(const CString&, const CString&)> check_cb)
 {
 	m_checkFuncList[_T("int")] = std::bind(&CExcel::IsInt, this, std::placeholders::_1);
 	m_checkFuncList[_T("macros")] = std::bind(&CExcel::IsMacros, this, std::placeholders::_1);
@@ -24,7 +23,7 @@ CExcel::CExcel()
 		}
 		m_types.Append(i.first);
 	}
-
+	m_callback = check_cb;
 }
 
 CExcel::~CExcel()
@@ -55,6 +54,7 @@ BOOL CExcel::CheckSheet(Excel::Sheet* sheet)
 
 BOOL CExcel::CheckHeader(Excel::Sheet* sheet, int row, BOOL isServerHeader)
 {
+	BOOL ret = TRUE;
 	for (int col = 0; col < sheet->columnsCount(); ++col)
 	{
 		const std::wstring& data = sheet->cell(row, col).getString();
@@ -88,16 +88,19 @@ BOOL CExcel::CheckHeader(Excel::Sheet* sheet, int row, BOOL isServerHeader)
 		if (m_checkFuncList.find(strType.c_str()) == m_checkFuncList.end())
 		{
 			m_err.Format(_T("[%d,%c]错误,列类型只支持[%s], 你填写的是%s"), row + 1, col + 65, m_types.GetBuffer(), strType.c_str());
-			return FALSE;
+			m_callback(m_sheet, m_err);
+			ret = FALSE;
+			continue;
 		}
 		m_colInfo[col] = strType.c_str();
 	}
-	return TRUE;
+	return ret;
 }
 
 BOOL CExcel::CheckData(Excel::Sheet* sheet, int row)
 {
 	std::map<CString, int> m_idList;
+	BOOL ret = TRUE;
 	for (int r = row; r < sheet->rowsCount(); ++r)
 	{
 		for (int c = 0; c < sheet->columnsCount(); ++c)
@@ -186,13 +189,15 @@ BOOL CExcel::CheckData(Excel::Sheet* sheet, int row)
 				if (data.IsEmpty())
 				{
 					m_err.Format(_T("[%d, %c]不能为空"), r + 1, c + 65);
-					return FALSE;
+					m_callback(m_sheet, m_err);
+					// return FALSE;
 				}
 				std::map<CString, int>::const_iterator itr = m_idList.find(data);
 				if (itr != m_idList.end())
 				{
 					m_err.Format(_T("[%d, %c]数据和第[%d, A]重复"), r + 1, c + 65, itr->second);
-					return FALSE;
+					m_callback(m_sheet, m_err);
+					//return FALSE;
 				}
 			}
 			std::map<int, CString>::iterator i = m_colInfo.find(c);
@@ -202,10 +207,10 @@ BOOL CExcel::CheckData(Excel::Sheet* sheet, int row)
 			}
 			if (!CheckDataFormat(sheet, i->second, data))
 			{
-				m_err.Format(_T("[%d, %c]数据格式错误:%s,需要的是:%s"), r + 1, c + 65, data.GetBuffer(),i->second.GetBuffer());
-				return FALSE;
+				m_err.Format(_T("[%d, %c]:%s不是:%s"), r + 1, c + 65, data.GetBuffer(),i->second.GetBuffer());
+				m_callback(m_sheet, m_err);
+				//return FALSE;
 			}
-
 		}
 	}
 	return TRUE;
@@ -258,6 +263,13 @@ BOOL CExcel::IsFloat(const CString& data)
 
 BOOL CExcel::IsString(const CString& data)
 {
+	if (data[0] == '"')
+	{
+		if (data[data.GetLength() - 1] != '"')
+		{
+			return FALSE;
+		}
+	}
 	return TRUE;
 }
 
@@ -554,53 +566,45 @@ std::string CExcel::CString2String(CString from)
 	return p;
 }
 
-BOOL CExcel::Check(const CString& file, int id)
+BOOL CExcel::Check(const CString& file, std::function<int(int)> SetProgressBarCallBack, std::function<int(int)> UpdateProgressBarCallBack)
 {
 	try
 	{
 		m_file = _T("[") + file + _T("]");
 		Excel::Book book(CString2String(file));
 		int nSheets = book.sheetsCount();
-		ProgressCmd pc;
-		pc.id = id;
-		pc.type = 0;
-		pc.arg1 = 0;
-		pc.arg2 = nSheets;
-		MQ<ProgressCmd>::getInstance().Push(pc);
+		SetProgressBarCallBack(nSheets);
 		for (int i = 0; i < nSheets; ++i)
 		{
 			m_sheet.Format(_T("%s"), book.sheetName(i).c_str());
-			Queue::getInstance().Push(_T("开始处理:") + m_file + _T("Sheet(") + m_sheet + _T(")"));
+			//m_callback(0, m_sheet, _T(""));
 			Excel::Sheet* sheet = book.sheet(i);
 			if (NULL == sheet)
 			{
 				continue;
 			}
 			BOOL ret = CheckSheet(sheet);
-			ProgressCmd pcdone;
-			pcdone.id = id;
-			pcdone.type = 1;
-			pcdone.arg1 = i + 1;
-			MQ<ProgressCmd>::getInstance().Push(pcdone);
-			if (!ret)
-			{
-				Queue::getInstance().Push(_T("处理:") + m_file + _T("Sheet(") + m_sheet + _T(")失败:") + m_err);
-				return ret;
-			}
-			Queue::getInstance().Push(_T("处理:") + m_file + _T("Sheet(") + m_sheet + _T(")成功"));
+			UpdateProgressBarCallBack(i + 1);
+	/*		if (!ret)
+			{*/
+				//m_callback(m_sheet, m_err);
+			//}
 		}
 		return TRUE;
 	}
 	catch (const Excel::Exception& e)
 	{
+		m_callback(_T(""), e.whatAsWString().c_str());
 		return FALSE;
 	}
 	catch (const CompoundFile::Exception& e)
 	{
+		m_callback(_T(""), e.whatAsWString().c_str());
 		return FALSE;
 	}
-	catch (const std::exception&)
+	catch (const std::exception& e)
 	{
+		m_callback(_T(""), CString(e.what()));
 		return FALSE;
 	}
 	return TRUE;

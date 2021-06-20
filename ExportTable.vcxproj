@@ -196,13 +196,12 @@
     <ClInclude Include="CListCtrlEx.h" />
     <ClInclude Include="CProgressBar.h" />
     <ClInclude Include="CRichEditCtrlEx.h" />
+    <ClInclude Include="CSetupDialog.h" />
     <ClInclude Include="Excel.h" />
-    <ClInclude Include="enum.h" />
     <ClInclude Include="ExportTable.h" />
     <ClInclude Include="ExportTableDlg.h" />
     <ClInclude Include="framework.h" />
     <ClInclude Include="pch.h" />
-    <ClInclude Include="Queue.h" />
     <ClInclude Include="Resource.h" />
     <ClInclude Include="targetver.h" />
   </ItemGroup>
@@ -210,6 +209,7 @@
     <ClCompile Include="CListCtrlEx.cpp" />
     <ClCompile Include="CProgressBar.cpp" />
     <ClCompile Include="CRichEditCtrlEx.cpp" />
+    <ClCompile Include="CSetupDialog.cpp" />
     <ClCompile Include="Excel.cpp" />
     <ClCompile Include="ExportTable.cpp" />
     <ClCompile Include="ExportTableDlg.cpp" />
@@ -222,9 +222,6 @@
   </ItemGroup>
   <ItemGroup>
     <ResourceCompile Include="ExportTable.rc" />
-  </ItemGroup>
-  <ItemGroup>
-    <None Include="res\ExportTable.rc2" />
   </ItemGroup>
   <ItemGroup>
     <Image Include="res\ExportTable.ico" />
