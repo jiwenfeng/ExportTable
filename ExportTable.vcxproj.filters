@@ -51,6 +51,9 @@
     <ClInclude Include="CHelpDialog.h">
       <Filter>头文件</Filter>
     </ClInclude>
+    <ClInclude Include="json_batchallocator.h">
+      <Filter>源文件</Filter>
+    </ClInclude>
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="ExportTable.cpp">
@@ -80,6 +83,15 @@
     <ClCompile Include="CHelpDialog.cpp">
       <Filter>源文件</Filter>
     </ClCompile>
+    <ClCompile Include="json_reader.cpp">
+      <Filter>源文件</Filter>
+    </ClCompile>
+    <ClCompile Include="json_value.cpp">
+      <Filter>源文件</Filter>
+    </ClCompile>
+    <ClCompile Include="json_writer.cpp">
+      <Filter>源文件</Filter>
+    </ClCompile>
   </ItemGroup>
   <ItemGroup>
     <ResourceCompile Include="ExportTable.rc">
@@ -90,5 +102,16 @@
     <Image Include="res\ExportTable.ico">
       <Filter>资源文件</Filter>
     </Image>
+  </ItemGroup>
+  <ItemGroup>
+    <None Include="json_internalarray.inl">
+      <Filter>源文件</Filter>
+    </None>
+    <None Include="json_internalmap.inl">
+      <Filter>源文件</Filter>
+    </None>
+    <None Include="json_valueiterator.inl">
+      <Filter>源文件</Filter>
+    </None>
   </ItemGroup>
 </Project>

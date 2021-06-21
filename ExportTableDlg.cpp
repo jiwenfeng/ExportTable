@@ -13,8 +13,10 @@
 #include <thread>
 #include "CSetupDialog.h"
 #include "CHelpDialog.h"
+#include "curl/curl.h"
+#include "json/json.h"
 
-#pragma comment(lib, "Shlwapi.lib")
+//#pragma comment(lib, "Shlwapi.lib")
 
 
 #ifdef _DEBUG
@@ -75,6 +77,9 @@ BOOL CExportTableDlg::OnInitDialog()
 
 
 	// TODO: 在此添加额外的初始化代码
+
+	curl_global_init(CURL_GLOBAL_WIN32);
+
 	DWORD style = m_fileList.GetExStyle();
 	style |= LVS_EX_CHECKBOXES;
 	style |= LVS_EX_GRIDLINES;
@@ -98,14 +103,22 @@ BOOL CExportTableDlg::OnInitDialog()
 void CExportTableDlg::LoadConfig()
 {
 	CString cfgFile = _T("./config.ini");
+
+	int helped = GetPrivateProfileIntW(_T("Config"), _T("ShowHelp"), 0, cfgFile);
+	if (!helped)
+	{
+		CHelpDialog dialog(this);
+		dialog.DoModal();
+	}
+
 	wchar_t ed[MAX_PATH] = { 0 };
 	wchar_t cd[MAX_PATH] = { 0 };
 	wchar_t sd[MAX_PATH] = { 0 };
 	wchar_t hd[MAX_PATH] = { 0 };
-	GetPrivateProfileString(_T("Setup"), _T("Excel"), _T(""), ed, sizeof(ed), cfgFile);
-	GetPrivateProfileString(_T("Setup"), _T("Client"), _T(""), cd, sizeof(cd), cfgFile);
-	GetPrivateProfileString(_T("Setup"), _T("ServerIP"), _T(""), sd, sizeof(sd), cfgFile);
-	GetPrivateProfileString(_T("Setup"), _T("HostID"), _T(""), hd, sizeof(hd), cfgFile);
+	GetPrivateProfileStringW(_T("Setup"), _T("Excel"), _T(""), ed, sizeof(ed), cfgFile);
+	GetPrivateProfileStringW(_T("Setup"), _T("Client"), _T(""), cd, sizeof(cd), cfgFile);
+	GetPrivateProfileStringW(_T("Setup"), _T("ServerIP"), _T(""), sd, sizeof(sd), cfgFile);
+	GetPrivateProfileStringW(_T("Setup"), _T("HostID"), _T(""), hd, sizeof(hd), cfgFile);
 	m_strExcelDir = ed;
 	m_strClientDir = cd;
 	m_strServerIP = sd;
@@ -124,8 +137,8 @@ void CExportTableDlg::LoadServer()
 	CString cfgFile = _T("./config.ini");
 	wchar_t sd[MAX_PATH] = { 0 };
 	wchar_t hd[MAX_PATH] = { 0 };
-	GetPrivateProfileString(_T("Setup"), _T("ServerIP"), _T(""), sd, sizeof(sd), cfgFile);
-	GetPrivateProfileString(_T("Setup"), _T("HostID"), _T(""), hd, sizeof(hd), cfgFile);
+	GetPrivateProfileStringW(_T("Setup"), _T("ServerIP"), _T(""), sd, sizeof(sd), cfgFile);
+	GetPrivateProfileStringW(_T("Setup"), _T("HostID"), _T(""), hd, sizeof(hd), cfgFile);
 	m_strServerIP = sd;
 	m_strHostID = hd;
 	m_serverEdit.SetWindowTextW(m_strServerIP + _T(":") + m_strHostID);
@@ -180,7 +193,7 @@ void CExportTableDlg::LoadXLSFile()
 {
 	CString cfgFile = _T("./config.ini");
 	wchar_t ed[MAX_PATH] = { 0 };
-	GetPrivateProfileString(_T("Setup"), _T("Excel"), _T(""), ed, sizeof(ed), cfgFile);
+	GetPrivateProfileStringW(_T("Setup"), _T("Excel"), _T(""), ed, sizeof(ed), cfgFile);
 	m_strExcelDir = ed;
 
 	m_fileList.DeleteAllItems();
@@ -270,14 +283,69 @@ int CExportTableDlg::UpdateProgressBarCallback(int id, int nPos)
 	return 0;
 }
 
+void CExportTableDlg::HttpResponse(void* ptr, size_t size, size_t nmemb, void* stream)
+{
+	char* str = (char*)ptr;
+	CString* pstr = (CString*)stream;
+
+	int bufSize = MultiByteToWideChar(CP_ACP, 0, str, -1, NULL, 0);
+	wchar_t* pwstr = new wchar_t[bufSize];
+	MultiByteToWideChar(CP_UTF8, 0, str, -1, pwstr, bufSize);
+	std::wcout.imbue(std::locale("chs"));
+	
+	pstr->Append(pwstr, bufSize);
+	delete[] pwstr;
+}
+
+void CExportTableDlg::Output(const CString& data)
+{
+	m_richEdit.SetSel(-1, -1);
+	m_richEdit.ReplaceSel(data);
+	m_richEdit.ReplaceSel(_T("\r\n"));
+	m_richEdit.SendMessage(WM_VSCROLL, SB_BOTTOM, 0);
+}
+
+std::string CExportTableDlg::ConvertCStringToUTF8(CString strValue)
+{
+	std::wstring wbuffer;
+#ifdef _UNICODE
+	wbuffer.assign(strValue.GetString(), strValue.GetLength());
+#else
+	/*
+	 * 转换ANSI到UNICODE
+	 * 获取转换后长度
+	 */
+	int length = ::MultiByteToWideChar(CP_ACP, MB_ERR_INVALID_CHARS, (LPCTSTR)strValue, -1, NULL, 0);
+	wbuffer.resize(length);
+	/* 转换 */
+	MultiByteToWideChar(CP_ACP, 0, (LPCTSTR)strValue, -1, (LPWSTR)(wbuffer.data()), wbuffer.length());
+#endif
+
+	/* 获取转换后长度 */
+	int length = WideCharToMultiByte(CP_UTF8, 0, wbuffer.data(), wbuffer.size(), NULL, 0, NULL, NULL);
+	/* 获取转换后内容 */
+	std::string buffer;
+	buffer.resize(length);
+
+	WideCharToMultiByte(CP_UTF8, 0, strValue, -1, (LPSTR)(buffer.data()), length, NULL, NULL);
+	return(buffer);
+}
+
 void CExportTableDlg::CheckXLSFile(std::map<int, CString> exportList)
 {
-	m_status.clear();
+	DWORD start = GetTickCount64();
 	int nCount = m_fileList.GetItemCount();
-	for (int i = 0; i < nCount; ++i)
+	CExcel cmd(nullptr);
+	const Table &table = cmd.Read(m_strExcelDir + _T("common_config.xls"), 1);
+	std::map<CString, CString > psCmds;
+	for (Table::const_iterator i = table.cbegin(); i != table.cend(); ++i)
 	{
-		m_fileList.SetItemText(i, 2, _T(""));
+		CString cmd = i->at(0);
+		CString name = i->at(1);
+		psCmds.insert(std::make_pair(name, cmd));
 	}
+	psCmds.insert(std::make_pair(_T("J_奖励表-英雄.xlsx"), _T("J_奖励表")));
+	psCmds.insert(std::make_pair(_T("J_奖励表.xlsx"), _T("J_奖励表")));
 	m_richEdit.SetWindowTextW(_T("开始检查数据表格式...\r\n"));
 	for (std::map<int, CString>::iterator i = exportList.begin(); i != exportList.end(); ++i)
 	{
@@ -292,34 +360,119 @@ void CExportTableDlg::CheckXLSFile(std::map<int, CString> exportList)
 			m_fileList.EnsureVisible(i->first, FALSE);
 		}
 
+		if (i->second == _T("J_奖励表.xlsx") || i->second == _T("J_奖励表-英雄.xlsx"))
+		{
+			continue;
+		}
 
 		CExcel excel(
-			std::bind(&CExportTableDlg::CheckCallback, this, i->first, i->second, std::placeholders::_1, std::placeholders::_2)
+			std::bind(&CExportTableDlg::CheckCallback, this, i->first, m_strExcelDir + i->second, std::placeholders::_1, std::placeholders::_2)
 		);
 		excel.Check(
-			i->second,
+			m_strExcelDir + i->second,
 			std::bind(&CExportTableDlg::SetProgressBarCallback, this, i->first, std::placeholders::_1),
 			std::bind(&CExportTableDlg::UpdateProgressBarCallback, this, i->first, std::placeholders::_1)
 		);
 		m_pgExport.OffsetPos(1);
 	}
-
-	m_richEdit.SetSel(-1, -1);
+	m_pgExport.SetPos(0);
 	if (!m_status.empty())
 	{	
-		m_richEdit.ReplaceSel(_T("数据表填写有误，导表终止\r\n"));
+		Output(_T("数据表填写有误，导表终止"));
 	}
 	else
 	{
-		m_richEdit.ReplaceSel(_T("数据表格式检查完成，开始执行导表...\r\n"));
-	}
+		Output(_T("数据表格式检查完成开始执行导表,请不要关闭程序..."));
+		std::map<CString, int> psCache;
+		for (std::map<int, CString>::iterator i = exportList.begin(); i != exportList.end(); ++i)
+		{
+			std::map<CString, CString>::iterator itr = psCmds.find(i->second);
 
+			if (itr == psCmds.end())
+			{
+				Output(_T("表格 [") + i->second + _T("] 没有找到ps指令,已跳过"));
+				m_pgExport.OffsetPos(1);
+				continue;
+			}
+
+			std::map<CString, int>::iterator k = psCache.find(itr->second);
+			if (k != psCache.end())
+			{
+				Output(_T("[") + i->second + _T("] 导出成功"));
+				m_pgExport.OffsetPos(1);
+				continue;
+			}
+			Output(_T("正在导出[") + i->second + _T("]"));
+			CURL* curl = curl_easy_init();
+			CString strURL = m_strServerIP + _T(":") + m_strHostID  + _T("/ps?file=") + itr->second;
+			std::string url = ConvertCStringToUTF8(strURL);
+			CString response;
+			curl_easy_setopt(curl, CURLOPT_URL, url.c_str());
+			curl_easy_setopt(curl, CURLOPT_CONNECTTIMEOUT, 3);
+			curl_easy_setopt(curl, CURLOPT_VERBOSE, 0);
+			curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, CExportTableDlg::HttpResponse);
+			curl_easy_setopt(curl, CURLOPT_WRITEDATA, (void*)&response);
+			CURLcode res = curl_easy_perform(curl);
+			curl_easy_cleanup(curl);
+			if (res == CURLE_COULDNT_CONNECT)
+			{
+				Output(_T("致命错误！连接服务器" + m_strServerIP + _T(":") + m_strHostID + _T("失败，导表终止")));
+				break;
+			}
+			std::string rsp = CExcel::CString2String(response);
+			Json::Value root;
+			Json::Reader reader;
+			
+			reader.parse(rsp.c_str(), root);
+			if (root["IsSuccess"].asInt() == 1)
+			{
+				Output(_T("[") + i->second + _T("]导表成功!"));
+			}
+			else
+			{
+				Output(_T("[") + i->second + _T("]导表失败!"));
+			}
+			psCache[itr->second] = 1;
+			m_pgExport.OffsetPos(1);
+		}
+	}
+	ShellExecute(NULL, _T("open"), _T("copy.bat"), m_strExcelDir + _T(" ") + m_strClientDir, _T(""), SW_SHOWNORMAL);
 	m_pgExport.SetPos(0);
 	m_btnExport.EnableWindow(true);
 	m_btnSelectAll.EnableWindow(true);
 	m_flag = TRUE;
 	OnBnClickedButtonSelectall();
 	m_pgExport.ShowWindow(false);
+	m_status.clear();
+	for (int i = 0; i < nCount; ++i)
+	{
+		m_fileList.SetItemText(i, 2, _T(""));
+	}
+
+	DWORD finish = GetTickCount64();
+	DWORD diff = finish - start;
+	CString strCost = _T("导表结束，本次执行共用时:");
+	if (diff > 60000)
+	{
+		CString strMin;
+		strMin.Format(_T("%d分"), diff / 60000);
+		strCost += strMin;
+		diff %= 60000;
+	}
+	if (diff > 1000)
+	{
+		CString strMin;
+		strMin.Format(_T("%d秒"), diff / 1000);
+		strCost += strMin;
+		diff %= 1000;
+	}
+	if (diff > 0)
+	{
+		CString strMin;
+		strMin.Format(_T("%d毫秒"), diff);
+		strCost += strMin;
+	}
+	Output(strCost);
 }
 
 void CExportTableDlg::OnBnClickedOk()
@@ -330,8 +483,7 @@ void CExportTableDlg::OnBnClickedOk()
 	{
 		if (m_fileList.GetCheck(i))
 		{
-			CString file = m_strExcelDir + m_fileList.GetItemText(i, 1);
-			exportList.insert(std::make_pair(i, file));
+			exportList.insert(std::make_pair(i, m_fileList.GetItemText(i, 1)));
 		}
 	}
 	if (exportList.empty())
@@ -398,7 +550,7 @@ void CExportTableDlg::On32772()
 	}
 	CString cfgFile = _T("./config.ini");
 	wchar_t cd[MAX_PATH] = { 0 };
-	GetPrivateProfileString(_T("Setup"), _T("Client"), _T(""), cd, sizeof(cd), cfgFile);
+	GetPrivateProfileStringW(_T("Setup"), _T("Client"), _T(""), cd, sizeof(cd), cfgFile);
 	m_strClientDir = cd;
 }
 

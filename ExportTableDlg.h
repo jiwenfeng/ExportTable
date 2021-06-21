@@ -8,6 +8,7 @@
 #include <map>
 #include "CRichEditCtrlEx.h"
 #include "CListCtrlEx.h"
+#include <string>
 
 // CExportTableDlg 对话框
 class CExportTableDlg : public CDialogEx
@@ -43,6 +44,7 @@ public:
 	afx_msg void OnTimer(UINT_PTR nIDEvent);
 	virtual BOOL DestroyWindow();
 	afx_msg void On32772();
+	afx_msg void On32775();
 
 private:
 	void LoadXLSFile();
@@ -58,6 +60,14 @@ private:
 	void LoadConfig();
 
 	void LoadServer();
+
+public:
+	static void HttpResponse(void* ptr, size_t size, size_t nmemb, void* stream);
+
+	void Output(const CString& data);
+
+	std::string ConvertCStringToUTF8(CString strValue);
+
 private:
 	CListCtrlEx m_fileList;
 	CRichEditCtrlEx m_richEdit;
@@ -73,6 +83,5 @@ private:
 	CString m_strHostID;
 	std::map<int, int> m_status;
 	CEdit m_serverEdit;
-public:
-	afx_msg void On32775();
+
 };

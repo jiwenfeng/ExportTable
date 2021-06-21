@@ -3,10 +3,14 @@
 
 #include <map>
 #include <string>
+#include <vector>
 #include <functional>
 #include <book.hpp>
 #include <exceptions.hpp>
 #include <compoundfile/compoundfile_exceptions.hpp>
+
+using Row = std::vector<CString>;
+using Table = std::vector<Row>;
 
 class CExcel
 {
@@ -53,11 +57,19 @@ private:
 
 
 private:
-	std::string CString2String(CString from);
+
+	CString GetCellData(Excel::Sheet* sheet, int row, int col);
+
 public:
+	const Table &Read(const CString& file, int sheet);
+
 	BOOL Check(const CString &file, std::function<int(int)> SetProgressBarCallBack, std::function<int(int)> UpdateProgressBarCallBack);
 
 	CString ErrorMsg();
+
+public:
+	static std::string CString2String(CString from);
+
 
 private:
 	CString m_err;
@@ -67,6 +79,8 @@ private:
 	std::map<int, CString> m_colInfo;
 	std::function<int(const CString&, const CString&)> m_callback;
 	std::map <CString, std::function<BOOL (const CString& data)> > m_checkFuncList;
+	
+	std::map<int, Table> m_data;
 };
 
 #endif

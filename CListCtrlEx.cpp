@@ -120,7 +120,7 @@ void CListCtrlEx::OnKeyDown(UINT nChar, UINT nRepCnt, UINT nFlags)
 		}
 		if (v.size() != 0)
 		{
-			int row = m_nCount % v.size();
+			int row = m_nCount % v.size() + v[0];
 			SetItemState(row, LVIS_SELECTED | LVIS_FOCUSED, LVIS_SELECTED | LVIS_FOCUSED);
 			EnsureVisible(row, FALSE);
 		}
