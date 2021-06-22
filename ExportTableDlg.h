@@ -9,6 +9,7 @@
 #include "CRichEditCtrlEx.h"
 #include "CListCtrlEx.h"
 #include <string>
+#include <vector>
 
 // CExportTableDlg 对话框
 class CExportTableDlg : public CDialogEx
@@ -55,7 +56,9 @@ private:
 
 	int UpdateProgressBarCallback(int id, int nPos);
 
-	void CheckXLSFile(std::map<int, CString> exportList);
+	void CheckXLSFile(std::map<int, CString> mExportList);
+
+	void DoExportTable(const std::map<int, CString>& mExportList, CFile* file, std::map<CString, std::vector<std::pair<CString, CString> > > &mExportFile);
 
 	void LoadConfig();
 
@@ -68,12 +71,15 @@ public:
 
 	std::string ConvertCStringToUTF8(CString strValue);
 
+	BOOL HasRepeatFile(const std::map<CString, std::vector<std::pair<CString, CString> > >& mExportFiles, const CString& table, const std::vector<std::pair<CString, CString> >& vExportFiles);
+
 private:
 	CListCtrlEx m_fileList;
 	CRichEditCtrlEx m_richEdit;
 	CButton m_btnSelectAll;
 	CButton m_btnExport;
 	CProgressCtrl m_pgExport;
+	CEdit m_serverEdit;
 
 private:
 	BOOL m_flag;
@@ -82,6 +88,5 @@ private:
 	CString m_strServerIP;
 	CString m_strHostID;
 	std::map<int, int> m_status;
-	CEdit m_serverEdit;
-
+	std::map<CString, CString> m_cmds;
 };

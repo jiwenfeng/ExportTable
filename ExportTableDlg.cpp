@@ -200,11 +200,13 @@ void CExportTableDlg::LoadXLSFile()
 	CFileFind ff;
 	BOOL ret = ff.FindFile(m_strExcelDir + _T("*.xls"));
 	int i = 0;
+	bool bHasCommonConfig = FALSE;
 	while (ret)
 	{
 		ret = ff.FindNextFileW();
 		if (ff.GetFileTitle() == "common_config")
 		{
+			bHasCommonConfig = TRUE;
 			continue;
 		}
 		m_fileList.InsertItem(i, _T(""));
@@ -214,6 +216,11 @@ void CExportTableDlg::LoadXLSFile()
 	}
 	ff.Close();
 	m_fileList.InitProgressColumn(i);
+	if (!bHasCommonConfig)
+	{
+		MessageBox(_T("该文件夹下没有common_config.xls，无法执行导表命令"), _T("错误"), MB_ICONERROR);
+		return;
+	}
 	if (m_fileList.GetItemCount() == 0) 
 	{
 		m_btnSelectAll.EnableWindow(FALSE);
@@ -225,6 +232,16 @@ void CExportTableDlg::LoadXLSFile()
 		m_btnExport.EnableWindow(TRUE);
 		m_fileList.SetFocus();
 	}
+	m_cmds.clear();
+	CExcel cmd(nullptr);
+	const Table& table = cmd.Read(m_strExcelDir + _T("common_config.xls"), 1);
+	for (Table::const_iterator i = table.cbegin(); i != table.cend(); ++i)
+	{
+		CString cmd = i->at(0);
+		CString name = i->at(1);
+		m_cmds.insert(std::make_pair(name, cmd));
+	}
+
 }
 
 int CExportTableDlg::CheckCallback(int id, const CString &file, const CString& sheet, const CString& err)
@@ -331,23 +348,35 @@ std::string CExportTableDlg::ConvertCStringToUTF8(CString strValue)
 	return(buffer);
 }
 
-void CExportTableDlg::CheckXLSFile(std::map<int, CString> exportList)
+BOOL CExportTableDlg::HasRepeatFile(const std::map<CString, std::vector<std::pair<CString, CString> > >& mExportFiles, const CString &table, const std::vector<std::pair<CString, CString> >& vExportFiles)
+{
+	BOOL ret = FALSE;
+	for (std::map<CString, std::vector<std::pair<CString, CString> > >::const_iterator i = mExportFiles.begin(); i != mExportFiles.end(); ++i)
+	{
+		for (std::vector<std::pair<CString, CString> >::const_iterator j = i->second.begin(); j != i->second.end(); ++j)
+		{
+			for (std::vector<std::pair<CString, CString> >::const_iterator k = vExportFiles.begin(); k != vExportFiles.end(); ++k)
+			{
+				if (k->first == j->first)
+				{
+					CString err = _T("[") + i->first + _T("] sheet ") + j->second + _T("和文件[") + table + _T("]sheet ") + k->second + _T("导出的文件重名");
+					ret = TRUE;
+				}
+			}
+		}
+	}
+	return ret;
+}
+
+void CExportTableDlg::CheckXLSFile(std::map<int, CString> mExportList)
 {
 	DWORD start = GetTickCount64();
 	int nCount = m_fileList.GetItemCount();
-	CExcel cmd(nullptr);
-	const Table &table = cmd.Read(m_strExcelDir + _T("common_config.xls"), 1);
-	std::map<CString, CString > psCmds;
-	for (Table::const_iterator i = table.cbegin(); i != table.cend(); ++i)
-	{
-		CString cmd = i->at(0);
-		CString name = i->at(1);
-		psCmds.insert(std::make_pair(name, cmd));
-	}
-	//psCmds.insert(std::make_pair(_T("J_奖励表-英雄.xlsx"), _T("J_奖励表")));
-	//psCmds.insert(std::make_pair(_T("J_奖励表.xlsx"), _T("J_奖励表")));
 	m_richEdit.SetWindowTextW(_T("开始检查数据表格式...\r\n"));
-	for (std::map<int, CString>::iterator i = exportList.begin(); i != exportList.end(); ++i)
+
+	std::map<CString, std::vector<std::pair<CString, CString> > > mClientExportFiles, mServerExportFiles;
+	BOOL bCheckRet = TRUE;
+	for (std::map<int, CString>::iterator i = mExportList.begin(); i != mExportList.end(); ++i)
 	{
 		if (i->first > m_fileList.GetTopIndex())
 		{
@@ -359,88 +388,71 @@ void CExportTableDlg::CheckXLSFile(std::map<int, CString> exportList)
 		{
 			m_fileList.EnsureVisible(i->first, FALSE);
 		}
-
 		if (i->second == _T("J_奖励表.xlsx") || i->second == _T("J_奖励表-英雄.xlsx"))
 		{
 			continue;
 		}
-
+		CString file = m_strExcelDir + i->second;
 		CExcel excel(
-			std::bind(&CExportTableDlg::CheckCallback, this, i->first, m_strExcelDir + i->second, std::placeholders::_1, std::placeholders::_2)
+			std::bind(&CExportTableDlg::CheckCallback, this, i->first, file, std::placeholders::_1, std::placeholders::_2)
 		);
-		excel.Check(
-			m_strExcelDir + i->second,
+		std::vector<std::pair<CString, CString> > vClientExportFiles, vServerExportFiles;
+		BOOL ret = excel.Check(
+			file,
+			vClientExportFiles,
+			vServerExportFiles,
 			std::bind(&CExportTableDlg::SetProgressBarCallback, this, i->first, std::placeholders::_1),
 			std::bind(&CExportTableDlg::UpdateProgressBarCallback, this, i->first, std::placeholders::_1)
 		);
+
+		if (ret)
+		{
+			if (HasRepeatFile(mClientExportFiles, file, vClientExportFiles))
+			{
+				bCheckRet = FALSE;
+			}
+			else
+			{
+				mClientExportFiles[file] = vClientExportFiles;
+			}
+			if (HasRepeatFile(mServerExportFiles, file, vServerExportFiles))
+			{
+				bCheckRet = FALSE;
+			}
+			else
+			{
+				mServerExportFiles[file] = vServerExportFiles;
+			}
+		}
+		else
+		{
+			bCheckRet = FALSE;
+		}
+
 		m_pgExport.OffsetPos(1);
 	}
 	m_pgExport.SetPos(0);
-	if (!m_status.empty())
+	if (!m_status.empty() || bCheckRet)
 	{	
 		Output(_T("数据表填写有误，导表终止"));
 	}
 	else
 	{
-		Output(_T("数据表格式检查完成开始执行导表,请不要关闭程序..."));
-		std::map<CString, int> psCache;
-		int flag = TRUE;
-		for (std::map<int, CString>::iterator i = exportList.begin(); i != exportList.end(); ++i)
+		Output(_T("开始执行导表流程，请不要关闭程序..."));
+		CFile file;
+		if (!file.Open(_T("need_copy.txt"), CFile::modeCreate | CFile::modeWrite))
 		{
-			CString strURL = m_strServerIP + _T(":") + m_strHostID;
-			if (i->second == _T("J_奖励表.xlsx") || i->second == _T("J_奖励表-英雄.xlsx"))
+			if (IDOK == MessageBox(_T("打开文件need_copy.txt失败。点击确定则继续执行导表流程，后面需要手动将文件拷贝到客户端目录"), _T("提示"), MB_OKCANCEL | MB_ICONINFORMATION))
 			{
-				int pos = i->second.ReverseFind('.');
-				CString name = i->second.Left(pos);
-				strURL += _T("/parse_reward?file=") + name;
+				DoExportTable(mExportList, NULL, mClientExportFiles);
 			}
-			else
-			{
-				std::map<CString, CString>::iterator itr = psCmds.find(i->second);
-				if (itr == psCmds.end())
-				{
-					Output(_T("表格 [") + i->second + _T("] 没有找到ps指令,已跳过"));
-					m_pgExport.OffsetPos(1);
-					continue;
-				}
-				strURL += _T("/ps?file=") + itr->second;
-				psCache[itr->second] = 1;
-			}
-			CURL* curl = curl_easy_init();
-			std::string url = ConvertCStringToUTF8(strURL);
-			CString response;
-			curl_easy_setopt(curl, CURLOPT_URL, url.c_str());
-			curl_easy_setopt(curl, CURLOPT_CONNECTTIMEOUT, 3);
-			curl_easy_setopt(curl, CURLOPT_VERBOSE, 0);
-			curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, CExportTableDlg::HttpResponse);
-			curl_easy_setopt(curl, CURLOPT_WRITEDATA, (void*)&response);
-			CURLcode res = curl_easy_perform(curl);
-			curl_easy_cleanup(curl);
-			if (res == CURLE_COULDNT_CONNECT)
-			{
-				Output(_T("致命错误！连接服务器" + m_strServerIP + _T(":") + m_strHostID + _T("失败，导表终止")));
-				flag = FALSE;
-				break;
-			}
-			std::string rsp = CExcel::CString2String(response);
-			Json::Value root;
-			Json::Reader reader;
-			
-			reader.parse(rsp.c_str(), root);
-			if (root["IsSuccess"].asInt() == 1)
-			{
-				Output(_T("[") + i->second + _T("]导表成功!"));
-			}
-			else
-			{
-				Output(_T("[") + i->second + _T("]导表失败!"));
-			}
-			m_pgExport.OffsetPos(1);
 		}
-		if (flag)
+		else
 		{
-			ShellExecute(NULL, _T("open"), _T("copy.bat"), m_strExcelDir + _T(" ") + m_strClientDir, _T(""), SW_SHOWNORMAL);
+			DoExportTable(mExportList, &file, mClientExportFiles);
+			file.Close();
 		}
+	
 	}
 	m_pgExport.SetPos(0);
 	m_btnExport.EnableWindow(true);
@@ -478,6 +490,85 @@ void CExportTableDlg::CheckXLSFile(std::map<int, CString> exportList)
 		strCost += strMin;
 	}
 	Output(strCost);
+}
+
+void CExportTableDlg::DoExportTable(const std::map<int, CString>& mExportList, CFile* file, std::map<CString, std::vector<std::pair<CString, CString> > >& mExportFile)
+{
+	std::map<CString, int> psCache;
+	int bExportSuccess = TRUE;
+	for (std::map<int, CString>::const_iterator i = mExportList.begin(); i != mExportList.end(); ++i)
+	{
+		CString strURL = m_strServerIP + _T(":") + m_strHostID;
+		if (i->second == _T("J_奖励表.xlsx") || i->second == _T("J_奖励表-英雄.xlsx"))
+		{
+			int pos = i->second.ReverseFind('.');
+			CString name = i->second.Left(pos);
+			strURL += _T("/parse_reward?file=") + name;
+		}
+		else
+		{
+			std::map<CString, CString>::iterator itr = m_cmds.find(i->second);
+			if (itr == m_cmds.end())
+			{
+				Output(_T("表格 [") + i->second + _T("] 没有找到ps指令,已跳过"));
+				m_pgExport.OffsetPos(1);
+				continue;
+			}
+			strURL += _T("/ps?file=") + itr->second;
+			psCache[itr->second] = 1;
+		}
+		CURL* curl = curl_easy_init();
+		std::string url = ConvertCStringToUTF8(strURL);
+		CString response;
+		curl_easy_setopt(curl, CURLOPT_URL, url.c_str());
+		curl_easy_setopt(curl, CURLOPT_CONNECTTIMEOUT, 3);
+		curl_easy_setopt(curl, CURLOPT_VERBOSE, 0);
+		curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, CExportTableDlg::HttpResponse);
+		curl_easy_setopt(curl, CURLOPT_WRITEDATA, (void*)&response);
+		CURLcode res = curl_easy_perform(curl);
+		curl_easy_cleanup(curl);
+		if (res == CURLE_COULDNT_CONNECT)
+		{
+			Output(_T("致命错误！连接服务器" + m_strServerIP + _T(":") + m_strHostID + _T("失败，导表终止")));
+			bExportSuccess = FALSE;
+			break;
+		}
+		std::string rsp = CExcel::CString2String(response);
+		Json::Value root;
+		Json::Reader reader;
+		reader.parse(rsp.c_str(), root);
+		if (root["IsSuccess"].asInt() == 1)
+		{
+			Output(_T("[") + i->second + _T("]导出成功!"));
+		}
+		else
+		{
+			Output(_T("[") + i->second + _T("]导出失败!"));
+			bExportSuccess = FALSE;
+		}
+		m_pgExport.OffsetPos(1);
+	}
+	if (bExportSuccess)
+	{
+		if (file)
+		{
+			for (std::map<int, CString>::const_iterator i = mExportList.begin(); i != mExportList.end(); ++i)
+			{
+				std::map<CString, std::vector<std::pair<CString, CString> > >::const_iterator itr = mExportFile.find(i->second);
+				if (itr == mExportFile.end())
+				{
+					Output(_T("拷贝[") + i->second + _T("]中生成的文件失败,请手动拷贝"));
+					continue;
+				}
+				for (std::vector<std::pair<CString, CString> >::const_iterator j = itr->second.begin(); j != itr->second.end(); ++j)
+				{
+					CString fileName = j->first + _T(".lua");
+					file->Write(fileName, fileName.GetLength());
+				}
+			}
+			ShellExecute(NULL, _T("open"), _T("copy.bat"), m_strExcelDir + _T(" ") + m_strClientDir, _T(""), SW_SHOWNORMAL);
+		}
+	}
 }
 
 void CExportTableDlg::OnBnClickedOk()

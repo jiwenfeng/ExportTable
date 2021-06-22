@@ -20,7 +20,7 @@ public:
 	~CExcel();
 
 private:
-	BOOL CheckSheet(Excel::Sheet* sheet);
+	BOOL CheckSheet(Excel::Sheet* sheet, CString& strClientExportFile, CString &strServerExportFile);
 
 	BOOL CheckHeader(Excel::Sheet* sheet, int row, BOOL isServerHeader);
 
@@ -63,13 +63,12 @@ private:
 public:
 	const Table &Read(const CString& file, int sheet);
 
-	BOOL Check(const CString &file, std::function<int(int)> SetProgressBarCallBack, std::function<int(int)> UpdateProgressBarCallBack);
-
-	CString ErrorMsg();
+	BOOL Check(const CString &file, std::vector<std::pair<CString, CString> > &vClientExportFile, std::vector<std::pair<CString, CString> > &vServerExportFile, std::function<int(int)> SetProgressBarCallBack, std::function<int(int)> UpdateProgressBarCallBack);
 
 public:
 	static std::string CString2String(CString from);
 
+	CString DoubleToString(double n);
 
 private:
 	CString m_err;

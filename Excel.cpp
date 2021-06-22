@@ -30,21 +30,42 @@ CExcel::~CExcel()
 {
 }
 
-BOOL CExcel::CheckSheet(Excel::Sheet* sheet)
+BOOL CExcel::CheckSheet(Excel::Sheet* sheet, CString &strClientExportFile, CString &strServerExportFile)
 {
 	m_colInfo.clear();
-	const Excel::Cell& cell = sheet->cell(0, 0);
-	if (cell.getString() != _T("output")) // 不解析
+	BOOL bCheckData = FALSE;
+	if (sheet->cell(0, 1).getString() == _T("TRUE")) // 导出客户端
 	{
-		return TRUE;
+		if (strClientExportFile.IsEmpty())
+		{
+			m_callback(m_sheet, _T("[2, B]需要填写客户端导出文件"));
+		}
+		else
+		{
+			int nHeaderRow = sheet->cell(2, 1).getDouble();
+			if (CheckHeader(sheet, nHeaderRow - 1, FALSE))
+			{
+				bCheckData = TRUE;
+			}
+		}
 	}
-	int nClientHeaderRow = sheet->cell(2, 1).getDouble();
-	if (!CheckHeader(sheet, nClientHeaderRow - 1, FALSE))
+	if (sheet->cell(0, 2).getString() == _T("TRUE")) // 导出服务端
 	{
-		return FALSE;
+		strServerExportFile = sheet->cell(1, 2).getString().c_str();
+		if (strServerExportFile.IsEmpty())
+		{
+			m_callback(m_sheet, _T("[2, C]需要填写服务端导出文件"));
+		}
+		else
+		{
+			int nHeaderRow = sheet->cell(2, 2).getDouble();
+			if (CheckHeader(sheet, nHeaderRow - 1, FALSE))
+			{
+				bCheckData = TRUE;
+			}
+		}
 	}
-	int nServerHeaderRow = sheet->cell(2, 2).getDouble();
-	if (!CheckHeader(sheet, nServerHeaderRow - 1, FALSE))
+	if (!bCheckData)
 	{
 		return FALSE;
 	}
@@ -66,23 +87,17 @@ BOOL CExcel::CheckHeader(Excel::Sheet* sheet, int row, BOOL isServerHeader)
 		size_t s1 = data.find('(');
 		if (std::wstring::npos == s1)
 		{
-			//m_err.Format(_T("[%d,%c]错误,格式为name(type),你填写的是%s"), row + 1, col + 65, data.c_str());
-			//return FALSE;
 			continue;
 		}
 		int s2 = data.find(')');
 		if (-1 == s2)
 		{
-			//m_err.Format(_T("[%d,%c]错误,格式为name(type),你填写的是%s"), row + 1, col + 65, data.c_str());
-			//return FALSE;
 			continue;
 		}
 		std::wstring strName = data.substr(0, s1);
 		std::wstring strType = data.substr(s1 + 1, s2 - s1 - 1);
 		if (strName.empty() || strType.empty())
 		{
-			// m_err.Format(_T("[%d,%c]错误,格式为name(type),你填写的是%s"), row + 1, col + 65, data.c_str());
-			// return FALSE;
 			continue;
 		}
 
@@ -115,99 +130,19 @@ BOOL CExcel::CheckData(Excel::Sheet* sheet, int row)
 	{
 		for (int c = 0; c < sheet->columnsCount(); ++c)
 		{
-			Excel::Cell::DataType type = sheet->cell(r, c).dataType();
-			CString data;
-			if (type == Excel::Cell::DataType::String)
-			{
-				data = sheet->cell(r, c).getString().c_str();
-			}
-			else if (type == Excel::Cell::DataType::Double)
-			{
-				double nData = sheet->cell(r, c).getDouble();
-				data.Format(_T("%lf"), nData);
-				int n = 0;
-				int i = data.GetLength() - 1;
-				while (i >= 0 && data[i] != '.')
-				{
-					if (data[i] > '0')
-					{
-						break;
-					}
-					++n;
-					--i;
-				}
-				if (data[i] == '.')
-				{
-					++n;
-				}
-				data.Delete(data.GetLength() - n, n);
-			}
-			else if (type == Excel::Cell::DataType::Formula)	// 公式
-			{
-				const Excel::Cell &cell =  sheet->cell(r, c);
-				const Excel::Formula& formula = cell.getFormula();
-				Excel::Formula::ValueType vt = formula.valueType();
-				switch(vt)
-				{ 
-					case Excel::Formula::ValueType::DoubleValue:
-					{
-						data.Format(_T("%lf"), formula.getDouble());
-						int n = 0;
-						int i = data.GetLength() - 1;
-						while (i >= 0 && data[i] != '.')
-						{
-							if (data[i] > '0')
-							{
-								break;
-							}
-							++n;
-							--i;
-						}
-						if (data[i] == '.')
-						{
-							++n;
-						}
-						data.Delete(data.GetLength() - n, n);
-						break;
-					}
-					case Excel::Formula::ValueType::StringValue:
-					{
-						return TRUE;			// 公式就不检查了
-						data = formula.getString().c_str();
-						break;
-					}
-					default:
-						break;
-				}
-			}
-			int j = 0;
-			int len = data.GetLength();
-			while (j < len)
-			{
-				if (data[j] == '\r' || data[j] == '\n' || data[j] == ' ')
-				{
-					data.Delete(j, 1);
-					len--;
-				}
-				else
-				{
-					++j;
-				}
-			}
+			CString data = GetCellData(sheet, r, c);
 			if (c == 0)
 			{
 				if (data.IsEmpty())
 				{
 					m_err.Format(_T("[%d, %c]不能为空"), r + 1, c + 65);
 					m_callback(m_sheet, m_err);
-					// return FALSE;
 				}
 				std::map<CString, int>::const_iterator itr = m_idList.find(data);
 				if (itr != m_idList.end())
 				{
 					m_err.Format(_T("[%d, %c]数据和第[%d, A]重复"), r + 1, c + 65, itr->second);
 					m_callback(m_sheet, m_err);
-					//return FALSE;
 				}
 			}
 			std::map<int, CString>::iterator i = m_colInfo.find(c);
@@ -219,7 +154,6 @@ BOOL CExcel::CheckData(Excel::Sheet* sheet, int row)
 			{
 				m_err.Format(_T("[%d, %c]:%s不是:%s"), r + 1, c + 65, data.GetBuffer(),i->second.GetBuffer());
 				m_callback(m_sheet, m_err);
-				//return FALSE;
 			}
 		}
 	}
@@ -577,6 +511,31 @@ std::string CExcel::CString2String(CString from)
 	return result;
 }
 
+CString CExcel::DoubleToString(double n)
+{
+	CString str;
+	str.Format(_T("%lf"), n);
+	int i = str.GetLength() - 1;
+	while (i > 0)
+	{
+		char ch = str.GetAt(i);
+		if (ch == '.')
+		{
+			i--;
+			break;
+		}
+		if (ch > '0')
+		{
+			break;
+		}
+	}
+	if (i > 0)
+	{
+		return str.Left(i);
+	}
+	return str;
+}
+
 CString CExcel::GetCellData(Excel::Sheet* sheet, int row, int col)
 {
 	Excel::Cell::DataType type = sheet->cell(row, col).dataType();
@@ -588,23 +547,7 @@ CString CExcel::GetCellData(Excel::Sheet* sheet, int row, int col)
 	else if (type == Excel::Cell::DataType::Double)
 	{
 		double nData = sheet->cell(row, col).getDouble();
-		data.Format(_T("%lf"), nData);
-		int n = 0;
-		int i = data.GetLength() - 1;
-		while (i >= 0 && data[i] != '.')
-		{
-			if (data[i] > '0')
-			{
-				break;
-			}
-			++n;
-			--i;
-		}
-		if (data[i] == '.')
-		{
-			++n;
-		}
-		data.Delete(data.GetLength() - n, n);
+		data = DoubleToString(nData);
 	}
 	else if (type == Excel::Cell::DataType::Formula)	// 公式
 	{
@@ -615,23 +558,7 @@ CString CExcel::GetCellData(Excel::Sheet* sheet, int row, int col)
 		{
 		case Excel::Formula::ValueType::DoubleValue:
 		{
-			data.Format(_T("%lf"), formula.getDouble());
-			int n = 0;
-			int i = data.GetLength() - 1;
-			while (i >= 0 && data[i] != '.')
-			{
-				if (data[i] > '0')
-				{
-					break;
-				}
-				++n;
-				--i;
-			}
-			if (data[i] == '.')
-			{
-				++n;
-			}
-			data.Delete(data.GetLength() - n, n);
+			data = DoubleToString(formula.getDouble());
 			break;
 		}
 		case Excel::Formula::ValueType::StringValue:
@@ -642,7 +569,19 @@ CString CExcel::GetCellData(Excel::Sheet* sheet, int row, int col)
 			break;
 		}
 	}
-	return data;
+
+	CString strRet;
+
+	for (int i = 0; i < data.GetLength(); ++i)
+	{
+		char ch = data.GetAt(i);
+		if (ch == '\t' || ch == '\r' || ch == '\n' || ch == ' ')
+		{
+			continue;
+		}
+		strRet.AppendChar(ch);
+	}
+	return strRet;
 }
 
 const Table & CExcel::Read(const CString& file, int nsheet)
@@ -695,31 +634,50 @@ const Table & CExcel::Read(const CString& file, int nsheet)
 	return empty;
 }
 
-BOOL CExcel::Check(const CString& file, std::function<int(int)> SetProgressBarCallBack, std::function<int(int)> UpdateProgressBarCallBack)
+BOOL CExcel::Check(const CString& file, std::vector<std::pair<CString, CString> >& vClientExportFile, std::vector<std::pair<CString, CString> >& vServerExportFile, std::function<int(int)> SetProgressBarCallBack, std::function<int(int)> UpdateProgressBarCallBack)
 {
 	try
 	{
+		std::map<CString, CString> mClientExportFile, mServerExportFile;
 		m_file = _T("[") + file + _T("]");
 		Excel::Book book(CString2String(file));
 		int nSheets = book.sheetsCount();
 		SetProgressBarCallBack(nSheets);
+		BOOL ret = TRUE;
 		for (int i = 0; i < nSheets; ++i)
 		{
 			m_sheet.Format(_T("%s"), book.sheetName(i).c_str());
-			//m_callback(0, m_sheet, _T(""));
 			Excel::Sheet* sheet = book.sheet(i);
 			if (NULL == sheet)
 			{
 				continue;
 			}
-			BOOL ret = CheckSheet(sheet);
+			CString strClientExportFile, strServerExportFile;
+			BOOL ret = CheckSheet(sheet, strClientExportFile, strServerExportFile);
+			if (ret)
+			{
+				std::map<CString, CString>::iterator ci = mClientExportFile.find(strClientExportFile);
+				if (ci != mClientExportFile.end())
+				{
+					m_callback(_T(""), _T("sheet[") + ci->second + _T("]和sheet[") + m_sheet + _T("]导出的客户端文件重名"));
+					return FALSE;
+				}
+				std::map<CString, CString>::iterator si = mServerExportFile.find(strServerExportFile);
+				if (ci != mServerExportFile.end())
+				{
+					m_callback(_T(""), _T("sheet[") + ci->second + _T("]和sheet[") + m_sheet + _T("]导出的服务端文件重名"));
+					return FALSE;
+				}
+				vClientExportFile.push_back(std::make_pair(strClientExportFile, m_sheet));
+				vServerExportFile.push_back(std::make_pair(strServerExportFile, m_sheet));
+			}
+			else
+			{
+				ret = FALSE;
+			}
 			UpdateProgressBarCallBack(i + 1);
-	/*		if (!ret)
-			{*/
-				//m_callback(m_sheet, m_err);
-			//}
 		}
-		return TRUE;
+		return ret;
 	}
 	catch (const Excel::Exception& e)
 	{
@@ -737,9 +695,4 @@ BOOL CExcel::Check(const CString& file, std::function<int(int)> SetProgressBarCa
 		return FALSE;
 	}
 	return TRUE;
-}
-
-CString CExcel::ErrorMsg()
-{
-	return m_file + _T("Sheet(") + m_sheet + _T(")") + m_err;
 }
