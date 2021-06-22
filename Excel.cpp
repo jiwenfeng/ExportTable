@@ -55,6 +55,7 @@ BOOL CExcel::CheckSheet(Excel::Sheet* sheet)
 BOOL CExcel::CheckHeader(Excel::Sheet* sheet, int row, BOOL isServerHeader)
 {
 	BOOL ret = TRUE;
+	std::map<std::wstring, int> names;
 	for (int col = 0; col < sheet->columnsCount(); ++col)
 	{
 		const std::wstring& data = sheet->cell(row, col).getString();
@@ -92,6 +93,15 @@ BOOL CExcel::CheckHeader(Excel::Sheet* sheet, int row, BOOL isServerHeader)
 			ret = FALSE;
 			continue;
 		}
+		std::map<std::wstring, int>::iterator itr = names.find(strName);
+		if (itr != names.end())
+		{
+			m_err.Format(_T("[%d,%c]列和[%d,%c]列重名"), row + 1, col + 65, row + 1, itr->second + 65);
+			m_callback(m_sheet, m_err);
+			ret = FALSE;
+			continue;
+		}
+		names[strName] = col;
 		m_colInfo[col] = strType.c_str();
 	}
 	return ret;

@@ -5,6 +5,8 @@ VisualStudioVersion = 16.0.31402.337
 MinimumVisualStudioVersion = 10.0.40219.1
 Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "ExportTable", "ExportTable.vcxproj", "{56A40AF2-0A4F-42CA-97E5-497003EB8F9E}"
 EndProject
+Project("{54435603-DBB4-11D2-8724-00A0C9A8B90C}") = "ExportTableSetup", "..\ExportTableSetup\ExportTableSetup.vdproj", "{CA166F49-7329-4950-9886-414CF9EF7647}"
+EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|x64 = Debug|x64
@@ -21,6 +23,10 @@ Global
 		{56A40AF2-0A4F-42CA-97E5-497003EB8F9E}.Release|x64.Build.0 = Release|x64
 		{56A40AF2-0A4F-42CA-97E5-497003EB8F9E}.Release|x86.ActiveCfg = Release|Win32
 		{56A40AF2-0A4F-42CA-97E5-497003EB8F9E}.Release|x86.Build.0 = Release|Win32
+		{CA166F49-7329-4950-9886-414CF9EF7647}.Debug|x64.ActiveCfg = Debug
+		{CA166F49-7329-4950-9886-414CF9EF7647}.Debug|x86.ActiveCfg = Debug
+		{CA166F49-7329-4950-9886-414CF9EF7647}.Release|x64.ActiveCfg = Release
+		{CA166F49-7329-4950-9886-414CF9EF7647}.Release|x86.ActiveCfg = Release
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE

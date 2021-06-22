@@ -54,7 +54,7 @@ void CHelpDialog::OnShowWindow(BOOL bShow, UINT nStatus)
 1、服务器IP填写要执行导表任务的服务器IP，端口是导表服务器的端口加5\r\n\
 2、如果要修改设置，请点击菜单栏 文件->设置\r\n\
 3、只支持后缀为xls文件的格式检查\r\n\
-3、类型定义格式为name(type)，如果不是这个格式则不检查合法性，注意同一个sheet里面name不能重复。举个栗子 id(int)\r\n\
+3、类型定义格式为name(type)，如果不是这个格式则不检查合法性，注意同一个sheet里面name不能重复且大小写敏感。举个栗子 id(int)\r\n\
 4、数据类型支持int,float,string,str,map,array,macros,base64,float_base64\r\n\
 5、int 类型只能填写整数，取值范围[-2147483648, 2147483647]\r\n\
 6、要填小数请使用float类型，最多保留小数点后8位\r\n\
@@ -79,7 +79,7 @@ void CHelpDialog::OnShowWindow(BOOL bShow, UINT nStatus)
 	m_docEdit.SetSel(0, doc.GetLength());
 	m_docEdit.SetSelectionCharFormat(cf);
 	m_docEdit.SendMessage(EM_SETCHARFORMAT, SCF_SELECTION, (LPARAM)&cf);
-	m_docEdit.SetSel(-1, -1);
+	m_docEdit.SetSel(0, 0);
 	CDialog::OnShowWindow(bShow, nStatus);
 
 	// TODO: 在此处添加消息处理程序代码

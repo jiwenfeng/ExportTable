@@ -344,8 +344,8 @@ void CExportTableDlg::CheckXLSFile(std::map<int, CString> exportList)
 		CString name = i->at(1);
 		psCmds.insert(std::make_pair(name, cmd));
 	}
-	psCmds.insert(std::make_pair(_T("J_奖励表-英雄.xlsx"), _T("J_奖励表")));
-	psCmds.insert(std::make_pair(_T("J_奖励表.xlsx"), _T("J_奖励表")));
+	//psCmds.insert(std::make_pair(_T("J_奖励表-英雄.xlsx"), _T("J_奖励表")));
+	//psCmds.insert(std::make_pair(_T("J_奖励表.xlsx"), _T("J_奖励表")));
 	m_richEdit.SetWindowTextW(_T("开始检查数据表格式...\r\n"));
 	for (std::map<int, CString>::iterator i = exportList.begin(); i != exportList.end(); ++i)
 	{
@@ -384,27 +384,29 @@ void CExportTableDlg::CheckXLSFile(std::map<int, CString> exportList)
 	{
 		Output(_T("数据表格式检查完成开始执行导表,请不要关闭程序..."));
 		std::map<CString, int> psCache;
+		int flag = TRUE;
 		for (std::map<int, CString>::iterator i = exportList.begin(); i != exportList.end(); ++i)
 		{
-			std::map<CString, CString>::iterator itr = psCmds.find(i->second);
-
-			if (itr == psCmds.end())
+			CString strURL = m_strServerIP + _T(":") + m_strHostID;
+			if (i->second == _T("J_奖励表.xlsx") || i->second == _T("J_奖励表-英雄.xlsx"))
 			{
-				Output(_T("表格 [") + i->second + _T("] 没有找到ps指令,已跳过"));
-				m_pgExport.OffsetPos(1);
-				continue;
+				int pos = i->second.ReverseFind('.');
+				CString name = i->second.Left(pos);
+				strURL += _T("/parse_reward?file=") + name;
 			}
-
-			std::map<CString, int>::iterator k = psCache.find(itr->second);
-			if (k != psCache.end())
+			else
 			{
-				Output(_T("[") + i->second + _T("] 导出成功"));
-				m_pgExport.OffsetPos(1);
-				continue;
+				std::map<CString, CString>::iterator itr = psCmds.find(i->second);
+				if (itr == psCmds.end())
+				{
+					Output(_T("表格 [") + i->second + _T("] 没有找到ps指令,已跳过"));
+					m_pgExport.OffsetPos(1);
+					continue;
+				}
+				strURL += _T("/ps?file=") + itr->second;
+				psCache[itr->second] = 1;
 			}
-			Output(_T("正在导出[") + i->second + _T("]"));
 			CURL* curl = curl_easy_init();
-			CString strURL = m_strServerIP + _T(":") + m_strHostID  + _T("/ps?file=") + itr->second;
 			std::string url = ConvertCStringToUTF8(strURL);
 			CString response;
 			curl_easy_setopt(curl, CURLOPT_URL, url.c_str());
@@ -417,6 +419,7 @@ void CExportTableDlg::CheckXLSFile(std::map<int, CString> exportList)
 			if (res == CURLE_COULDNT_CONNECT)
 			{
 				Output(_T("致命错误！连接服务器" + m_strServerIP + _T(":") + m_strHostID + _T("失败，导表终止")));
+				flag = FALSE;
 				break;
 			}
 			std::string rsp = CExcel::CString2String(response);
@@ -432,11 +435,13 @@ void CExportTableDlg::CheckXLSFile(std::map<int, CString> exportList)
 			{
 				Output(_T("[") + i->second + _T("]导表失败!"));
 			}
-			psCache[itr->second] = 1;
 			m_pgExport.OffsetPos(1);
 		}
+		if (flag)
+		{
+			ShellExecute(NULL, _T("open"), _T("copy.bat"), m_strExcelDir + _T(" ") + m_strClientDir, _T(""), SW_SHOWNORMAL);
+		}
 	}
-	ShellExecute(NULL, _T("open"), _T("copy.bat"), m_strExcelDir + _T(" ") + m_strClientDir, _T(""), SW_SHOWNORMAL);
 	m_pgExport.SetPos(0);
 	m_btnExport.EnableWindow(true);
 	m_btnSelectAll.EnableWindow(true);
