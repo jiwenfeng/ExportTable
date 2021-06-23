@@ -34,35 +34,26 @@ BOOL CExcel::CheckSheet(Excel::Sheet* sheet, CString &strClientExportFile, CStri
 {
 	m_colInfo.clear();
 	BOOL bCheckData = FALSE;
-	if (sheet->cell(0, 1).getString() == _T("TRUE")) // 导出客户端
+	if (sheet->cell(0, 0).getString() != _T("output"))
 	{
-		if (strClientExportFile.IsEmpty())
+		return TRUE;
+	}
+	strClientExportFile = sheet->cell(1, 1).getString().c_str();
+	if (!strClientExportFile.IsEmpty())
+	{
+		int nHeaderRow = sheet->cell(2, 1).getDouble();
+		if (CheckHeader(sheet, nHeaderRow - 1, FALSE))
 		{
-			m_callback(m_sheet, _T("[2, B]需要填写客户端导出文件"));
-		}
-		else
-		{
-			int nHeaderRow = sheet->cell(2, 1).getDouble();
-			if (CheckHeader(sheet, nHeaderRow - 1, FALSE))
-			{
-				bCheckData = TRUE;
-			}
+			bCheckData = TRUE;
 		}
 	}
-	if (sheet->cell(0, 2).getString() == _T("TRUE")) // 导出服务端
+	strServerExportFile = sheet->cell(1, 2).getString().c_str();
+	if (!strServerExportFile.IsEmpty())
 	{
-		strServerExportFile = sheet->cell(1, 2).getString().c_str();
-		if (strServerExportFile.IsEmpty())
+		int nHeaderRow = sheet->cell(2, 2).getDouble();
+		if (CheckHeader(sheet, nHeaderRow - 1, FALSE))
 		{
-			m_callback(m_sheet, _T("[2, C]需要填写服务端导出文件"));
-		}
-		else
-		{
-			int nHeaderRow = sheet->cell(2, 2).getDouble();
-			if (CheckHeader(sheet, nHeaderRow - 1, FALSE))
-			{
-				bCheckData = TRUE;
-			}
+			bCheckData = TRUE;
 		}
 	}
 	if (!bCheckData)
@@ -130,13 +121,17 @@ BOOL CExcel::CheckData(Excel::Sheet* sheet, int row)
 	{
 		for (int c = 0; c < sheet->columnsCount(); ++c)
 		{
+			// 公式列直接跳过，不检查
+			if (sheet->cell(r, c).dataType() == Excel::Cell::DataType::Formula)
+			{
+				continue;
+			}
 			CString data = GetCellData(sheet, r, c);
 			if (c == 0)
 			{
 				if (data.IsEmpty())
 				{
-					m_err.Format(_T("[%d, %c]不能为空"), r + 1, c + 65);
-					m_callback(m_sheet, m_err);
+					break;
 				}
 				std::map<CString, int>::const_iterator itr = m_idList.find(data);
 				if (itr != m_idList.end())
@@ -148,7 +143,7 @@ BOOL CExcel::CheckData(Excel::Sheet* sheet, int row)
 			std::map<int, CString>::iterator i = m_colInfo.find(c);
 			if (i == m_colInfo.end())
 			{
-				return TRUE;
+				continue;
 			}
 			if (!CheckDataFormat(sheet, i->second, data))
 			{
@@ -169,7 +164,9 @@ BOOL CExcel::CheckDataFormat(Excel::Sheet* sheet, const CString &type,  const CS
 	auto itr = m_checkFuncList.find(type);
 	if (itr == m_checkFuncList.end())
 	{
-		CString err = _T("类型:") + type + _T("没有找到检查函数,检查失败");
+		CString msg;
+		msg.Format(_T("sheet %s 类型%s没有找到检查函数"), sheet->sheetName().c_str(), type.GetString());
+		m_callback(sheet->sheetName().c_str(), _T("类型:") + type + _T("没有找到检查函数,检查失败"));
 		return FALSE;
 	}
 	return itr->second(data);
@@ -207,13 +204,13 @@ BOOL CExcel::IsFloat(const CString& data)
 
 BOOL CExcel::IsString(const CString& data)
 {
-	if (data[0] == '"')
-	{
-		if (data[data.GetLength() - 1] != '"')
-		{
-			return FALSE;
-		}
-	}
+	//if (data[0] == '"')
+	//{
+	//	if (data[data.GetLength() - 1] != '"')
+	//	{
+	//		return FALSE;
+	//	}
+	//}
 	return TRUE;
 }
 
@@ -250,36 +247,46 @@ BOOL CExcel::MapIsValid(const CString& data)
 
 BOOL CExcel::MapDataIsValid(const CString& data)
 {
-	int counter = 0, counter1 = 0;
+	int counter = 0, counter1 = 0, counter2 = 0;
 	int i = 0, start = 0;
 	int len = data.GetLength();
 	while (i < len)
 	{
 		for (; i < len; ++i)
 		{
-			if (data[i] == '{')
+			wchar_t ch = data.GetAt(i);
+			//char ch = data[i];
+			if (ch == '{')
 			{
 				counter++;
 			}
-			else if (data[i] == '[')
+			else if (ch == '[')
 			{
 				counter1++;
 			}
-			else if (data[i] == '}')
+			else if (ch == '}')
 			{
 				counter--;
 			}
-			else if (data[i] == ']')
+			else if (ch == ']')
 			{
 				counter1--;
 			}
-			if (data[i] == ',')
+			else if (ch == '"')
 			{
-				if (counter == 0 && counter1 == 0)
+				counter2++;
+			}
+			else if (ch == ',')
+			{
+				if (counter == 0 && counter1 == 0 && (counter2 % 2) == 0)
 				{
 					break;
 				}
 			}
+		}
+		if (counter != 0 || counter1 != 0 || counter2 % 2 != 0)
+		{
+			return FALSE;
 		}
 		CString value = data.Mid(start, i - start);
 		if (!CheckMapDataFormat(value))
@@ -287,12 +294,8 @@ BOOL CExcel::MapDataIsValid(const CString& data)
 			return FALSE;
 		}
 		i++;
-		while (i < len && data[i] == ' ')
-		{
-			i++;
-		}
 		start = i;
-		i++;
+
 	}
 	return TRUE;
 }
@@ -387,7 +390,7 @@ BOOL CExcel::ArrayIsValid(const CString& data)
 	int c1 = 0, c2 = 0, c3 = 0, start = 0, i;
 	for ( i = 0; i < val.GetLength(); ++i)
 	{
-		char ch = val.GetAt(i);
+		wchar_t ch = val.GetAt(i);
 		switch (ch)
 		{
 		case '{':
@@ -410,7 +413,7 @@ BOOL CExcel::ArrayIsValid(const CString& data)
 			if (c1 == 0 && c2 == 0 && (c3 % 2) == 0)
 			{
 				CString d = val.Mid(start, i - start);
-				char c = d.GetAt(0);
+				wchar_t c = d.GetAt(0);
 				if (c != '"')
 				{
 					d.Insert(0, '"');
@@ -428,7 +431,7 @@ BOOL CExcel::ArrayIsValid(const CString& data)
 	if (start < val.GetLength())
 	{
 		CString d = val.Mid(start, val.GetLength() - start);
-		char c = d.GetAt(0);
+		wchar_t c = d.GetAt(0);
 		if (c != '"')
 		{
 			d.Insert(0, '"');
@@ -438,7 +441,7 @@ BOOL CExcel::ArrayIsValid(const CString& data)
 	}
 	for (std::vector<CString>::iterator i = v.begin(); i != v.end(); ++i)
 	{
-		char c = i->GetAt(0);
+		wchar_t c = i->GetAt(0);
 		if (c == '[')
 		{
 			if (!ArrayIsValid(*i))
@@ -516,9 +519,9 @@ CString CExcel::DoubleToString(double n)
 	CString str;
 	str.Format(_T("%lf"), n);
 	int i = str.GetLength() - 1;
-	while (i > 0)
+	while (i >= 0)
 	{
-		char ch = str.GetAt(i);
+		wchar_t ch = str.GetAt(i);
 		if (ch == '.')
 		{
 			i--;
@@ -528,10 +531,11 @@ CString CExcel::DoubleToString(double n)
 		{
 			break;
 		}
+		i--;
 	}
-	if (i > 0)
+	if (i >= 0)
 	{
-		return str.Left(i);
+		return str.Left(i + 1);
 	}
 	return str;
 }
@@ -563,25 +567,23 @@ CString CExcel::GetCellData(Excel::Sheet* sheet, int row, int col)
 		}
 		case Excel::Formula::ValueType::StringValue:
 		{
+			data = formula.getString().c_str();
 			break;
 		}
 		default:
 			break;
 		}
 	}
-
-	CString strRet;
-
 	for (int i = 0; i < data.GetLength(); ++i)
 	{
-		char ch = data.GetAt(i);
+		char ch = data[i];
 		if (ch == '\t' || ch == '\r' || ch == '\n' || ch == ' ')
 		{
-			continue;
+			data.Delete(i, 1);
+			--i;
 		}
-		strRet.AppendChar(ch);
 	}
-	return strRet;
+	return data;
 }
 
 const Table & CExcel::Read(const CString& file, int nsheet)
@@ -663,7 +665,7 @@ BOOL CExcel::Check(const CString& file, std::vector<std::pair<CString, CString> 
 					return FALSE;
 				}
 				std::map<CString, CString>::iterator si = mServerExportFile.find(strServerExportFile);
-				if (ci != mServerExportFile.end())
+				if (si != mServerExportFile.end())
 				{
 					m_callback(_T(""), _T("sheet[") + ci->second + _T("]和sheet[") + m_sheet + _T("]导出的服务端文件重名"));
 					return FALSE;

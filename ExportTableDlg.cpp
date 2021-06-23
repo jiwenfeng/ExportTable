@@ -413,7 +413,7 @@ void CExportTableDlg::CheckXLSFile(std::map<int, CString> mExportList)
 			}
 			else
 			{
-				mClientExportFiles[file] = vClientExportFiles;
+				mClientExportFiles[i->second] = vClientExportFiles;
 			}
 			if (HasRepeatFile(mServerExportFiles, file, vServerExportFiles))
 			{
@@ -421,7 +421,7 @@ void CExportTableDlg::CheckXLSFile(std::map<int, CString> mExportList)
 			}
 			else
 			{
-				mServerExportFiles[file] = vServerExportFiles;
+				mServerExportFiles[i->second] = vServerExportFiles;
 			}
 		}
 		else
@@ -432,7 +432,7 @@ void CExportTableDlg::CheckXLSFile(std::map<int, CString> mExportList)
 		m_pgExport.OffsetPos(1);
 	}
 	m_pgExport.SetPos(0);
-	if (!m_status.empty() || bCheckRet)
+	if (!m_status.empty() || !bCheckRet)
 	{	
 		Output(_T("数据表填写有误，导表终止"));
 	}
@@ -440,9 +440,9 @@ void CExportTableDlg::CheckXLSFile(std::map<int, CString> mExportList)
 	{
 		Output(_T("开始执行导表流程，请不要关闭程序..."));
 		CFile file;
-		if (!file.Open(_T("need_copy.txt"), CFile::modeCreate | CFile::modeWrite))
+		if (!file.Open(_T("update_client.bat"), CFile::modeCreate | CFile::modeWrite))
 		{
-			if (IDOK == MessageBox(_T("打开文件need_copy.txt失败。点击确定则继续执行导表流程，后面需要手动将文件拷贝到客户端目录"), _T("提示"), MB_OKCANCEL | MB_ICONINFORMATION))
+			if (IDOK == MessageBox(_T("打开文件update_client.bat失败。点击确定则继续执行导表流程，后面需要手动将文件拷贝到客户端目录"), _T("提示"), MB_OKCANCEL | MB_ICONINFORMATION))
 			{
 				DoExportTable(mExportList, NULL, mClientExportFiles);
 			}
@@ -450,7 +450,7 @@ void CExportTableDlg::CheckXLSFile(std::map<int, CString> mExportList)
 		else
 		{
 			DoExportTable(mExportList, &file, mClientExportFiles);
-			file.Close();
+			// file.Close();
 		}
 	
 	}
@@ -552,6 +552,12 @@ void CExportTableDlg::DoExportTable(const std::map<int, CString>& mExportList, C
 	{
 		if (file)
 		{
+			CString strDataPath = m_strExcelDir.Left(m_strExcelDir.GetLength() - 3) + _T("data\\");
+			CString cmd = _T("@echo off\r\n");
+			cmd += _T("FOR /F \"delims=\" %%I IN (\"svn.exe\") DO (if exist %%~$PATH:I (call :COPY & exit 0) else (echo 没有检测到svn命令，请重新安装svn并选择安装svn命令行工具 & pause & exit 1))\r\n");
+			cmd += _T(":COPY\r\n");
+			cmd += _T("cd /d ") + strDataPath + _T("\r\n");
+			cmd += _T("svn up\r\n");
 			for (std::map<int, CString>::const_iterator i = mExportList.begin(); i != mExportList.end(); ++i)
 			{
 				std::map<CString, std::vector<std::pair<CString, CString> > >::const_iterator itr = mExportFile.find(i->second);
@@ -562,11 +568,16 @@ void CExportTableDlg::DoExportTable(const std::map<int, CString>& mExportList, C
 				}
 				for (std::vector<std::pair<CString, CString> >::const_iterator j = itr->second.begin(); j != itr->second.end(); ++j)
 				{
-					CString fileName = j->first + _T(".lua");
-					file->Write(fileName, fileName.GetLength());
+					cmd += _T("copy /y ") + strDataPath + j->first + _T(".lua ") + m_strClientDir + _T("\r\n");
 				}
 			}
-			ShellExecute(NULL, _T("open"), _T("copy.bat"), m_strExcelDir + _T(" ") + m_strClientDir, _T(""), SW_SHOWNORMAL);
+			cmd += _T("GOTO:EOF\r\n");
+			cmd += _T("@echo off");
+			USES_CONVERSION;
+			char *ptr = T2A(cmd.GetBuffer());
+			file->Write(ptr, strlen(ptr));
+			file->Close();
+			ShellExecute(NULL, _T("open"), _T("update_client.bat"), _T(""), _T(""), SW_SHOWNORMAL);
 		}
 	}
 }
